@@ -36,14 +36,14 @@ import connectorBehavior
 import numpy as np
 import math
 
-path_modules = 'C:\\Users\\psachdeva\\Documents\\01_Promotion\\01_ANA_2.1\\FE'
+path_modules = 'N:\\Sachdeva\\MT_Nair\\ABAQUS\\MT\\Macros'
 
 os.chdir(path_modules)
 
 # Further packages:
 import coordinateTransformation as ct
 
-analysis_Path = 'C:\\Users\\psachdeva\\Documents\\01_Promotion\\01_ANA_2.1\\FE\\combined'
+analysis_Path = 'C:\\Users\\anair\\Documents\\01_Promotion\\01_ANA_2.1\\FE\\combined'
 
 session.journalOptions.setValues(replayGeometry=COORDINATE, recoverGeometry=COORDINATE)
 
@@ -1820,6 +1820,6 @@ def postProcessingCurvedCompositeCirc():
 #	for ii in range(len(iInterfaceEval)):
 #		cart_stressesExtrapolatedAndIntegrationPointInterfaceCirc('FEInterfaceCircRight'+str(iInterfaceEval[ii]),step,iInterfaceEval[ii],rInterfaceEval[ii])
 
-#postProcessingCurvedCompositeCirc()
+# postProcessingCurvedCompositeCirc()
 
 print('Berechnungszeit Simulation: ' + str(simTime) +  '  Berechnungszeit PostProcessing: ' + str(time.time()-startTime))

@@ -35,14 +35,14 @@ import connectorBehavior
 import numpy as np
 import math
 
-path_modules = 'C:\\Users\\psachdeva\\Documents\\01_Promotion\\01_ANA_2.1\\FE'
+path_modules = 'N:\\Sachdeva\\MT_Nair\\ABAQUS\\MT\\Macros'
 
 os.chdir(path_modules)
 
 # Further packages:
 import coordinateTransformation as ct
 
-analysis_Path = 'C:\\Users\\psachdeva\\Documents\\01_Promotion\\01_ANA_2.1\\FE\\2D_bending_monoclinic'
+analysis_Path = 'C:\\Users\\anair\\Documents\\01_Promotion\\01_ANA_2.1\\FE\\2D_bending_monoclinic'
 
 session.journalOptions.setValues(replayGeometry=COORDINATE, recoverGeometry=COORDINATE)
 
