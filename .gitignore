@@ -1,0 +1,12 @@
+# Ignore Python cache files
+*.pyc
+__pycache__/
+
+# Ignore Abaqus crash/debug files
+*.exception
+*.jnl
+*.lck
+*.log
+*.odb
+*.sta
+*.dat

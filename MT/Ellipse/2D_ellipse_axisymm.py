@@ -48,56 +48,58 @@ mdb.models[modelName].rootAssembly.regenerate()
 myModel = mdb.models[modelName]
 
 # Create a new sketch
-mySketch = myModel.ConstrainedSketch(name='EllipseSketch', sheetSize=200.0)
+
+s = mdb.models['EllipseModel_2D'].ConstrainedSketch(name='__profile__', 
+    sheetSize=200.0)
+g, v, d, c = s.geometry, s.vertices, s.dimensions, s.constraints
+s.sketchOptions.setValues(viewStyle=AXISYM)
+s.setPrimaryObject(option=STANDALONE)
+
+s.ConstructionLine(point1=(0.0, -100.0), point2=(0.0, 100.0))
+s.FixedConstraint(entity=g[2])
 
 center = (0.0, 0.0)
 majorAxisPoint = (m_a_inner, 0.0)
 minorAxisPoint = (0.0, m_b_inner)
 
-mySketch.EllipseByCenterPerimeter(center=center, axisPoint1=majorAxisPoint, axisPoint2=minorAxisPoint)
+s.EllipseByCenterPerimeter(center=center, axisPoint1=majorAxisPoint, axisPoint2=minorAxisPoint)
 
 outerMajorAxisPoint = (m_a_outer, 0.0)
 outerMinorAxisPoint = (0.0, m_b_outer)
 
-mySketch.EllipseByCenterPerimeter(center=center, axisPoint1=outerMajorAxisPoint, axisPoint2=outerMinorAxisPoint)
+s.EllipseByCenterPerimeter(center=center, axisPoint1=outerMajorAxisPoint, axisPoint2=outerMinorAxisPoint)
 
-mySketch.Line(point1=(0.0, m_b_outer), point2=(0.0, -m_b_outer))
-mySketch.Line(point1=(-m_a_outer, 0.0), point2=(m_a_outer, 0.0))
+s.autoTrimCurve(curve1=g.findAt((-m_a_inner, 0.0)), point1=(-m_a_inner, 0.0))
+s.autoTrimCurve(curve1=g.findAt((-m_a_outer, 0.0)), point1=(-m_a_outer, 0.0))
 
-# Use the coordinate transformation functions to find points on the curve to trim
-phi_values = np.radians([135, 225, 315])
-a_inner, b_inner = m_a_inner, m_b_inner
-a_outer, b_outer = m_a_outer, m_b_outer
-g = mySketch.geometry
+phi = np.radians(300)
+s.autoTrimCurve(
+    curve1=g.findAt((ct.pol2cart_x(m_a_inner, phi), ct.pol2cart_y(m_b_inner, phi))),
+    point1=(ct.pol2cart_x(m_a_inner, phi), ct.pol2cart_y(m_b_inner, phi))
+)
 
-for phi in phi_values:
-    x_inner = ct.pol2cart_x(a_inner, phi)
-    y_inner = ct.pol2cart_y(b_inner, phi)
-    x_outer = ct.pol2cart_x(a_outer, phi)
-    y_outer = ct.pol2cart_y(b_outer, phi)
-    
-    try:
-        mySketch.autoTrimCurve(curve1=g.findAt((x_inner, y_inner)), point1=(x_inner, y_inner))
-        mySketch.autoTrimCurve(curve1=g.findAt((x_outer, y_outer)), point1=(x_outer, y_outer))
-    except:
-        pass
+s.autoTrimCurve(
+    curve1=g.findAt((ct.pol2cart_x(m_a_outer, phi), ct.pol2cart_y(m_b_outer, phi))),
+    point1=(ct.pol2cart_x(m_a_outer, phi), ct.pol2cart_y(m_b_outer, phi))
+)
+s.Line(point1=(0.0, m_b_inner), point2=(0.0, m_b_outer))
 
-mySketch.autoTrimCurve(curve1=g.findAt((0, m_b_inner/2)), point1=(0, m_b_inner/2))
-mySketch.autoTrimCurve(curve1=g.findAt((0, -m_b_inner/2)), point1=(0, -m_b_inner/2))
-mySketch.autoTrimCurve(curve1=g.findAt((m_a_inner/2, 0)), point1=(m_a_inner/2, 0))
+s.Line(point1=(m_a_inner, 0.0), point2=(m_a_outer, 0.0))
 
-
-myPart = myModel.Part(name='EllipsePart', dimensionality=TWO_D_PLANAR, type=DEFORMABLE_BODY)
-myPart.BaseShell(sketch=mySketch)
+p = mdb.models['EllipseModel_2D'].Part(name='EllipsePart', dimensionality=AXISYMMETRIC, 
+    type=DEFORMABLE_BODY)
+p.BaseShell(sketch=s)
 
 # Create Partition
 p = mdb.models['EllipseModel_2D'].parts['EllipsePart']
 f = p.faces
 
+phi = np.radians(45)
+
 for i in range(1, N):
     t = p.MakeSketchTransform(
-        sketchPlane=f.findAt(coordinates=(ct.pol2cart_x(m_a_inner + i*thick/N, 45),
-                                         ct.pol2cart_y(m_b_inner + i*thick/N, 45), 0.0)),
+        sketchPlane=f.findAt(coordinates=(ct.pol2cart_x(m_a_inner + i*thick/N, phi),
+                                         ct.pol2cart_y(m_b_inner + i*thick/N, phi), 0.0)),
         sketchPlaneSide=SIDE1, origin=(0,0,0)
     )
     s = mdb.models['EllipseModel_2D'].ConstrainedSketch(name='__partition_%d__'%i, sheetSize=200, transform=t)
@@ -107,8 +109,8 @@ for i in range(1, N):
                                axisPoint1=(m_a_inner + i*thick/N, 0),
                                axisPoint2=(0, m_b_inner + i*thick/N))
     
-    pickedFace = f.findAt(((ct.pol2cart_x(m_a_inner + i*thick/N, 45),
-                            ct.pol2cart_y(m_b_inner + i*thick/N, 45), 0.0), ))
+    pickedFace = f.findAt(((ct.pol2cart_x(m_a_inner + i*thick/N, phi),
+                            ct.pol2cart_y(m_b_inner + i*thick/N, phi), 0.0), ))
     
     p.PartitionFaceBySketch(faces=pickedFace, sketch=s)
     del mdb.models['EllipseModel_2D'].sketches['__partition_%d__'%i]
@@ -123,8 +125,8 @@ myModel.HomogeneousSolidSection(name='AL_section',
 
 def assign_sections():
     for i in range(1, N+1):
-        faces = f.findAt(((ct.pol2cart_x(m_a_inner + i*thick/N, 45),
-                           ct.pol2cart_y(m_b_inner + i*thick/N, 45), 0.0), ))
+        faces = f.findAt(((ct.pol2cart_x(m_a_inner + i*thick/N, phi),
+                           ct.pol2cart_y(m_b_inner + i*thick/N, phi), 0.0), ))
         region = regionToolset.Region(faces=faces)
         p.SectionAssignment(region=region, sectionName='AL_section',
                             offset=0.0, offsetType=MIDDLE_SURFACE,
@@ -142,13 +144,13 @@ session.viewports['Viewport: 1'].view.setValues(session.views['Front'])
 # Crerate Sets
 e = a.instances['EllipsePart-1'].edges
 for i in range(0, N+1):
-    edges = e.findAt(((ct.pol2cart_x(m_a_inner + i*thick/N, 45),
-                       ct.pol2cart_y(m_b_inner + i*thick/N, 45), 0.0), ))
+    edges = e.findAt(((ct.pol2cart_x(m_a_inner + i*thick/N, phi),
+                       ct.pol2cart_y(m_b_inner + i*thick/N, phi), 0.0), ))
     a.Set(edges=edges, name='Curve-%d'%i)
 
 f1 = a.instances['EllipsePart-1'].faces
 for i in range(1, N+1):
-    face1 = f1.findAt(((ct.pol2cart_x(m_a_inner + i*thick/N - thick/(2*N), 45), ct.pol2cart_y(m_b_inner + i*thick/N - thick/(2*N), 45), 0.0), ))
+    face1 = f1.findAt(((ct.pol2cart_x(m_a_inner + i*thick/N - thick/(2*N), phi), ct.pol2cart_y(m_b_inner + i*thick/N - thick/(2*N), phi), 0.0), ))
     a.Set(faces=face1, name='Face-%d'%i)
 
 edges_combined = []
@@ -172,7 +174,7 @@ if edges_combined:
     a.Set(edges=edges_combined, name='top_load')
 
 # Create Surface
-side1Edges1 = e.findAt(((ct.pol2cart_x(m_a_inner, 45), ct.pol2cart_y(m_b_inner, 45), 0.0), ))
+side1Edges1 = e.findAt(((ct.pol2cart_x(m_a_inner, phi), ct.pol2cart_y(m_b_inner, phi), 0.0), ))
 a.Surface(side1Edges=side1Edges1, name='load')
 
 
@@ -211,7 +213,9 @@ a.seedEdgeBySize(edges=pickedEdges, size=edge_mesh, deviationFactor=0.1, constra
 pickedEdges = a.sets['bottom_load'].edges
 a.seedEdgeBySize(edges=pickedEdges, size=edge_mesh, deviationFactor=0.1, constraint=FINER)
 
-elemType1 = mesh.ElemType(elemCode=CPE8R, elemLibrary=STANDARD)
+elemType1 = mesh.ElemType(elemCode=CAX4R, elemLibrary=STANDARD, 
+    secondOrderAccuracy=OFF, hourglassControl=DEFAULT, 
+    distortionControl=DEFAULT)
 
 for i in range(1, N+1):
     pickedRegions = (a.sets['Face-{}'.format(i)].faces, )
