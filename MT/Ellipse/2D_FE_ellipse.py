@@ -22,7 +22,7 @@ session.journalOptions.setValues(replayGeometry=COORDINATE, recoverGeometry=COOR
 
 #############################   PARAMETERS    #############################
 
-m_a_inner = 100.0  # Semi-major axis of the inner ellipse
+m_a_inner = 150.0  # Semi-major axis of the inner ellipse
 m_b_inner = 100.0  # Semi-minor axis of the inner ellipse
 
 thick = 2.5  # Thickness

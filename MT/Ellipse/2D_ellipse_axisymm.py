@@ -10,7 +10,6 @@ import displayGroupMdbToolset as dgm
 import mesh
 
 
-
 path_modules = 'N:\\Sachdeva\\MT_Nair\\ABAQUS\\MT\\Macros'
 
 os.chdir(path_modules)
