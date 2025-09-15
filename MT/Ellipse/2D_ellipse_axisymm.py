@@ -1,5 +1,6 @@
 from abaqus import *
 from abaqusConstants import *
+from odbAccess import *
 import sketch
 import os
 import numpy as np
@@ -8,6 +9,7 @@ import section
 import regionToolset
 import displayGroupMdbToolset as dgm
 import mesh
+import math
 
 
 path_modules = 'N:\\Sachdeva\\MT_Nair\\ABAQUS\\MT\\Macros'
@@ -172,6 +174,7 @@ for i in range(1, N+1):
 if edges_combined:
     a.Set(edges=edges_combined, name='top_load')
 
+
 # Create Surface
 side1Edges1 = e.findAt(((ct.pol2cart_x(m_a_inner, phi), ct.pol2cart_y(m_b_inner, phi), 0.0), ))
 a.Surface(side1Edges=side1Edges1, name='load')
@@ -223,7 +226,56 @@ for i in range(1, N+1):
 partInstances =(a.instances['EllipsePart-1'], )
 a.generateMesh(regions=partInstances)
 
-######## Job
+########### Create set for ODB ###################
+
+model_name = 'EllipseModel_2D'
+instance_name = 'EllipsePart-1'
+a_in = m_a_inner
+b_in = m_b_inner
+ds = mesh_size
+set_name = 'Node-0'
+
+a_asm = mdb.models[model_name].rootAssembly
+inst = a_asm.instances[instance_name]
+
+# Bounding box size slightly smaller than mesh size
+dx = ds * 0.8
+dy = ds * 0.8
+
+phi = 0
+points = []
+while phi <= math.pi/2:
+    x = a_in * math.cos(phi)
+    y = b_in * math.sin(phi)
+    points.append((x, y))
+    dphi = ds / math.sqrt((a_in*math.sin(phi))**2 + (b_in*math.cos(phi))**2)
+    phi += dphi
+
+all_nodes = []
+for x, y in points:
+    nodes_found = inst.nodes.getByBoundingBox(
+        xMin=x-dx, xMax=x+dx,
+        yMin=y-dy, yMax=y+dy,
+        zMin=-1e-6, zMax=1e-6
+    )
+    all_nodes.extend(nodes_found)
+
+unique_nodes = {n.label:n for n in all_nodes}
+node_ids = [n.label for n in unique_nodes.values()]
+
+a_asm.SetFromNodeLabels(
+    name=set_name,
+    nodeLabels=((instance_name, tuple(node_ids)),)
+)
+
+regionDef=mdb.models['EllipseModel_2D'].rootAssembly.sets['Node-0']
+mdb.models['EllipseModel_2D'].FieldOutputRequest(name='F-Output-2', 
+    createStepName='LoadingStep', variables=('S', 'U', 'COORD'), 
+    region=regionDef, sectionPoints=DEFAULT, rebar=EXCLUDE)
+mdb.models['EllipseModel_2D'].fieldOutputRequests['F-Output-2'].setValues(
+    position=NODES)
+
+######## Job submission #################
 job_dir = r'N:\Sachdeva\MT_Nair\FE'
 if not os.path.exists(job_dir):
     os.makedirs(job_dir)
@@ -239,3 +291,56 @@ myJob = mdb.Job(name=jobName, model='EllipseModel_2D', description='',
 
 myJob.submit(consistencyChecking=OFF)
 myJob.waitForCompletion()
+
+##################### POST-PROCESSING ##########################
+odb_path = 'EllipseJob_2D.odb'
+odb = openOdb(path=odb_path)
+
+# --- Access Assembly, Step, and Frame ---
+step_name = 'LoadingStep'     # change if your step name is different
+frame = odb.steps[step_name].frames[-1]  # last frame (usually end of step)
+
+# --- Get Node Set ---
+set_name = 'NODE-0'
+node_set = odb.rootAssembly.nodeSets[set_name]
+
+# --- Get Nodal Coordinates ---
+coords = []
+for node in node_set.nodes[0]:  # nodes[0] → first (and only) instance
+    coords.append([node.label, node.coordinates[0], node.coordinates[1], node.coordinates[2]])
+
+coords = np.array(coords)
+
+# --- Get Stress Field Output ---
+stress_field = frame.fieldOutputs['S']
+stress_subset = stress_field.getSubset(region=node_set)
+
+# We will extract S11, S22, S12 (or whatever components you need)
+stress_data = []
+for v in stress_subset.values:
+    stress_data.append([v.nodeLabel, v.data[0], v.data[1], v.data[2]])  
+    # v.data[0] = S11, v.data[1] = S22, v.data[2] = S33 for 2D
+
+stress_data = np.array(stress_data)
+
+# --- Combine Coordinates + Stresses ---
+# Sort by node label to keep coordinates & stresses aligned
+coords_array = np.array(coords)          # shape: (n, 3)
+
+# Sort indices based on x-coordinate (column 0)
+sort_idx = np.argsort(coords_array[:, 0])
+
+coords_sorted = coords_array[sort_idx]
+stress_sorted = stress_data[sort_idx]
+
+combined = np.hstack((coords_sorted, stress_sorted[:,1:]))
+
+# --- Save to CSV ---
+np.savetxt('ellipse_nodes_and_stress.csv', combined,
+           delimiter=',',
+           header='Node,X,Y,Z,S11,S22,S12',
+           comments='')
+
+print('✅ Data saved to ellipse_nodes_and_stress.csv')
+
+odb.close()
