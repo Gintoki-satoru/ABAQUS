@@ -10,6 +10,7 @@ import regionToolset
 import displayGroupMdbToolset as dgm
 import mesh
 import math
+import csv
 
 
 path_modules = 'N:\\Sachdeva\\MT_Nair\\ABAQUS\\MT\\Macros'
@@ -28,8 +29,8 @@ m_b_inner = 100.0  # Semi-minor axis of the inner ellipse
 
 thick = 2.5  # Thickness
 
-m_a_outer = m_a_inner + thick  # Semi-major axis of the outer ellipse
-m_b_outer = m_b_inner + thick  # Semi-minor axis of the outer ellipse
+m_a_outer = m_a_inner + thick
+m_b_outer = m_b_inner + thick
 
 N = 4  # Number of partitions
 
@@ -233,7 +234,7 @@ instance_name = 'EllipsePart-1'
 a_in = m_a_inner
 b_in = m_b_inner
 ds = mesh_size
-set_name = 'Node-0'
+set_name = 'NODE-0'
 
 a_asm = mdb.models[model_name].rootAssembly
 inst = a_asm.instances[instance_name]
@@ -268,12 +269,47 @@ a_asm.SetFromNodeLabels(
     nodeLabels=((instance_name, tuple(node_ids)),)
 )
 
-regionDef=mdb.models['EllipseModel_2D'].rootAssembly.sets['Node-0']
-mdb.models['EllipseModel_2D'].FieldOutputRequest(name='F-Output-2', 
-    createStepName='LoadingStep', variables=('S', 'U', 'COORD'), 
-    region=regionDef, sectionPoints=DEFAULT, rebar=EXCLUDE)
-mdb.models['EllipseModel_2D'].fieldOutputRequests['F-Output-2'].setValues(
-    position=NODES)
+
+model_name = 'EllipseModel_2D'
+instance_name = 'EllipsePart-1'
+a_start = 150.0
+b_start = 100.0      
+ds = 0.5           
+
+a_asm = mdb.models[model_name].rootAssembly
+inst = a_asm.instances[instance_name]
+
+# --- Bounding box size ---
+dx = ds * 2
+dy = ds * 2
+
+for i in range(N):
+    a_in = a_start + i * (thick / N)
+    b_in = b_start + i * (thick / N)
+    phi = 0.0
+    points = []
+    while phi <= math.pi/2:
+        x = a_in * math.cos(phi)
+        y = b_in * math.sin(phi)
+        points.append((x, y))
+        dphi = ds / math.sqrt((a_in*math.sin(phi))**2 + (b_in*math.cos(phi))**2)
+        phi += dphi
+    all_elements = []
+    for x, y in points:
+        elems_found = inst.elements.getByBoundingBox(
+            xMin=x-dx/2, xMax=x+dx,
+            yMin=y-dy/2, yMax=y+dy,
+            zMin=-1e-6, zMax=1e-6 )
+        all_elements.extend(elems_found)
+    unique_elements = {e.label: e for e in all_elements}
+    element_list = list(unique_elements.values())
+    element_ids = [e.label for e in element_list]
+    elem_set_name = 'ELEM-{}'.format(i+1)
+    a_asm.SetFromElementLabels(
+        name=elem_set_name,
+        elementLabels=((instance_name, tuple(element_ids)),)
+    )
+    print('Created element set: {} with {} elements'.format(elem_set_name, len(element_ids)))
 
 ######## Job submission #################
 job_dir = r'N:\Sachdeva\MT_Nair\FE'
@@ -293,54 +329,55 @@ myJob.submit(consistencyChecking=OFF)
 myJob.waitForCompletion()
 
 ##################### POST-PROCESSING ##########################
+
 odb_path = 'EllipseJob_2D.odb'
-odb = openOdb(path=odb_path)
 
-# --- Access Assembly, Step, and Frame ---
-step_name = 'LoadingStep'     # change if your step name is different
-frame = odb.steps[step_name].frames[-1]  # last frame (usually end of step)
+if N % 2 == 0:
+    middle_index = (N // 2) + 1
+else:
+    middle_index = (N // 2) + 1
 
-# --- Get Node Set ---
-set_name = 'NODE-0'
-node_set = odb.rootAssembly.nodeSets[set_name]
+elem_set_name = "ELEM-{}".format(middle_index)
 
-# --- Get Nodal Coordinates ---
-coords = []
-for node in node_set.nodes[0]:  # nodes[0] → first (and only) instance
-    coords.append([node.label, node.coordinates[0], node.coordinates[1], node.coordinates[2]])
+step_name = 'LoadingStep'
+output_csv = 'element_stress_ip_coords.csv'
 
-coords = np.array(coords)
+odb = openOdb(odb_path)
+assembly = odb.rootAssembly
 
-# --- Get Stress Field Output ---
+try:
+    elemset = assembly.elementSets[elem_set_name]
+except KeyError:
+    print('Element set "{}" not found in ODB.'.format(elem_set_name))
+    odb.close()
+    raise
+
+# --- Last frame ---
+frame = odb.steps[step_name].frames[-1]
+
 stress_field = frame.fieldOutputs['S']
-stress_subset = stress_field.getSubset(region=node_set)
+stress_subset = stress_field.getSubset(region=elemset, position=INTEGRATION_POINT)
 
-# We will extract S11, S22, S12 (or whatever components you need)
-stress_data = []
-for v in stress_subset.values:
-    stress_data.append([v.nodeLabel, v.data[0], v.data[1], v.data[2]])  
-    # v.data[0] = S11, v.data[1] = S22, v.data[2] = S33 for 2D
+coord_field = frame.fieldOutputs['COORD']
+coord_subset = coord_field.getSubset(region=elemset, position=INTEGRATION_POINT)
 
-stress_data = np.array(stress_data)
+data = []
+for s_val, c_val in zip(stress_subset.values, coord_subset.values):
+    data.append([
+        s_val.elementLabel,
+        s_val.integrationPoint,
+        c_val.data[0],  # X (radial)
+        c_val.data[1],  # Y (axial)
+        s_val.data[0],  # S11
+        s_val.data[1],  # S22
+        s_val.data[2],  # S33
+        s_val.data[3]   # S12
+    ])
 
-# --- Combine Coordinates + Stresses ---
-# Sort by node label to keep coordinates & stresses aligned
-coords_array = np.array(coords)          # shape: (n, 3)
-
-# Sort indices based on x-coordinate (column 0)
-sort_idx = np.argsort(coords_array[:, 0])
-
-coords_sorted = coords_array[sort_idx]
-stress_sorted = stress_data[sort_idx]
-
-combined = np.hstack((coords_sorted, stress_sorted[:,1:]))
-
-# --- Save to CSV ---
-np.savetxt('ellipse_nodes_and_stress.csv', combined,
-           delimiter=',',
-           header='Node,X,Y,Z,S11,S22,S12',
-           comments='')
-
-print('✅ Data saved to ellipse_nodes_and_stress.csv')
+with open(output_csv, 'wb') as f:
+    writer = csv.writer(f)
+    writer.writerow(['Element', 'IntegrationPoint', 'X', 'Y', 'S11', 'S22', 'S33', 'S12'])
+    for row in data:
+        writer.writerow(row)
 
 odb.close()

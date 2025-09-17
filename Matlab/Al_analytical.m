@@ -40,13 +40,14 @@ Fem_x_meri = readmatrix('Circumfrential.xlsx', 'Range', 'H:I');
 
 
 
-data = readmatrix('Circumfrential.xlsx', 'Range', 'K:O'); 
+data = readmatrix('element_stress_ip_coords.csv', 'Range', 'C:H');  % entire columns
+data = data(2:end,:);  % skip the first row (header)
 
 x_f = data(:,1);  % r-coordinate
 y = data(:,2);  % z-coordinate
 S11 = data(:,3); % σ_rr
 S22 = data(:,4); % σ_zz
-S12 = data(:,5); % σ_rz (shear)
+S12 = data(:,6); % σ_rz (shear)
 
 n = length(x_f);
 
@@ -96,7 +97,7 @@ plot(x, s_meri, 'b', 'LineWidth', 2,  'DisplayName','Analytical results'); hold 
 plot(x_f, sigma_meridional,'ro', 'MarkerSize', 4, 'DisplayName','FEM results');
 xlabel('x');
 ylabel('\sigma_\phi (Meridional Stress)');
-% ylim([2.8 3.3])
+% ylim([2 5])
 grid on;
 legend show
-title('Meridional Stress \sigma_\phi vs x for Sphere');
+title('Meridional Stress \sigma_\phi vs x');
