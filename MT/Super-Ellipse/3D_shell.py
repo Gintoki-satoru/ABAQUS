@@ -19,7 +19,7 @@ session.journalOptions.setValues(replayGeometry=COORDINATE, recoverGeometry=COOR
 a = 150.0
 b = 100.0
 c = a
-n = 3
+n = 2
 thick = 2.5
 num_points = 100
 
@@ -52,24 +52,24 @@ myPart = model.Part(name=part_name, dimensionality=THREE_D, type=DEFORMABLE_BODY
 myPart.BaseShellRevolve(sketch=s, angle=90.0, flipRevolveDirection=ON)
 s.unsetPrimaryObject()
 
-############ Function for coordinate transform ############
-def ct_cart(a, b, c, r, s, u, v):
-    # a,b,c superellipsoid radii
-    # r,s shape exponents
-    # u latitude angle
-    # v longitude angle
-    theta = np.radians(u)  # latitude
-    phi = np.radians(v)
-    eps1 = 2.0 / n
-    eps2 = 2.0 / n
-    cos_theta = np.cos(theta)
-    sin_theta = np.sin(theta)
-    cos_phi = np.cos(phi)
-    sin_phi = np.sin(phi)
-    x = a * np.sign(cos_theta) * abs(cos_theta)**eps1 * np.sign(cos_phi) * abs(cos_phi)**eps2
-    y = b * np.sign(cos_theta) * abs(cos_theta)**eps1 * np.sign(sin_phi) * abs(sin_phi)**eps2
-    z = c * np.sign(sin_theta) * abs(sin_theta)**eps1
-    return x, y, z
+############ Function for selection in parametric form ############
+
+def superellipse_point(u):
+    """Parametric 2D superellipse curve point."""
+    cos_u = math.cos(u)
+    sin_u = math.sin(u)
+    x = a * math.copysign(abs(cos_u)**(2.0/n), cos_u)
+    y = b * math.copysign(abs(sin_u)**(2.0/n), sin_u)
+    return x, y
+
+def revolved_surface_point(phi, theta):
+    """Returns 3D point on revolved surface."""
+    x_curve, y_curve = superellipse_point(phi)
+    x = x_curve * math.cos(theta)
+    y = y_curve
+    z = x_curve * math.sin(theta)
+    return (x, y, z)
+
 
 ############ Material properties ############
 model.Material(name='Aluminium')
@@ -86,12 +86,15 @@ model.HomogeneousShellSection(name='Dome_shell',
 
 p = mdb.models['SuperEllipse'].parts['Dome']
 f = p.faces
-theta = -45
-phi = 45
-x, y, z = ct_cart(a, b, c, n, n, theta, phi)
+long = math.pi / 4      # longitude
+lat = -math.pi / 4  # latitude
+x, y, z = revolved_surface_point(long, lat)
+picked_point = (x, y, z)
+
 faces = f.findAt(((x, y, z), ))
 region = regionToolset.Region(faces=faces)
 p = mdb.models['SuperEllipse'].parts['Dome']
 p.SectionAssignment(region=region, sectionName='Dome_shell', offset=0.0, 
     offsetType=MIDDLE_SURFACE, offsetField='', 
     thicknessAssignment=FROM_SECTION)
+
