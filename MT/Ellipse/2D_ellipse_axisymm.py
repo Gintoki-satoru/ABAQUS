@@ -14,7 +14,7 @@ import csv
 
 
 path_modules = 'N:\\Sachdeva\\MT_Nair\\ABAQUS\\MT\\Macros'
-
+# path_modules = r"C:\Users\lenovo\Desktop\Aerospace\Thesis\ABAQUS\MT\Macros"
 os.chdir(path_modules)
 
 # Further packages:
@@ -313,6 +313,7 @@ for i in range(N):
 
 ######## Job submission #################
 job_dir = r'N:\Sachdeva\MT_Nair\FE'
+# job_dir = r"C:\Users\lenovo\Desktop\Aerospace\Thesis\FE_temp"
 if not os.path.exists(job_dir):
     os.makedirs(job_dir)
 
