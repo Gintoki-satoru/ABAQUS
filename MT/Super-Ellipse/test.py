@@ -17,19 +17,26 @@ session.journalOptions.setValues(replayGeometry=COORDINATE, recoverGeometry=COOR
 
 
 ################ Parameters #####################
-a, b, c = 150.0, 100.0, 120.0   # semi-axes
+a, b, c = 150.0, 100.0, 150.0   # semi-axes
 t = 2.5                         # thickness
-n1, n2 = 4, 4             # shape exponents
-num_points = 25                 # resolution along curve
+n1, n2 = 2, 2           # shape exponents
+num_points = 20                 # resolution along curve
+n_long = 4  # number of longitudinal partitions
 
 a_out, b_out, c_out = a + t, b + t, c + t
 
-# Get model and create a part to hold datum points
-model = mdb.models['Model-1']
-p = model.Part(name='DatumSuperEllipsoid', dimensionality=THREE_D, type=DEFORMABLE_BODY)
+Mdb()
+modelName = 'SuperEllipse'
+mdb.models.changeKey(fromName='Model-1', toName=modelName)
+model = mdb.models[modelName]
+model.rootAssembly.clearGeometryCache()
+model.rootAssembly.regenerate()
+p = model.Part(name='SuperEllipsoid', dimensionality=THREE_D, type=DEFORMABLE_BODY)
+
+################ Part Creation #####################
 
 # ------------------------
-# Helper function
+# Geometry creation function
 # ------------------------
 def signed_power(base, exp):
     return math.copysign(abs(base)**exp, base)
@@ -79,8 +86,12 @@ for phi in phi_vals:
     inner_points_case3.append(superellipsoid_point_3d(phi, theta_case3, a, b, c, n1, n2))
     outer_points_case3.append(superellipsoid_point_3d(phi, theta_case3, a_out, b_out, c_out, n1, n2))
 
+# Case2[-1] = Case3[-1]
+inner_points_case2[-1] = inner_points_case3[-1]
+outer_points_case2[-1] = outer_points_case3[-1]
+
 # ------------------------
-# Create datum points for all three cases
+# Create datum points
 # ------------------------
 def create_datums(point_list):
     for pt in point_list:
@@ -95,16 +106,15 @@ create_datums(inner_points_case2 + outer_points_case2)
 # Case 3
 create_datums(inner_points_case3 + outer_points_case3)
 
-
+# ------------------------
+# Create a wire spline using these datum points
+# ------------------------
 
 datum_inner_case1 = []
 for pt in inner_points_case1:
     dp = p.DatumPointByCoordinate(coords=pt)
     datum_inner_case1.append(p.datums[dp.id])
 
-# ------------------------
-# Create a wire spline using these datum points
-# ------------------------
 wire_inner_case1 = p.WireSpline(points=datum_inner_case1,
                                 mergeType=IMPRINT,
                                 meshable=ON,
@@ -115,9 +125,6 @@ for pt in outer_points_case1:
     dp = p.DatumPointByCoordinate(coords=pt)
     datum_inner_case1.append(p.datums[dp.id])
 
-# ------------------------
-# Create a wire spline using these datum points
-# ------------------------
 wire_inner_case1 = p.WireSpline(points=datum_inner_case1,
                                 mergeType=IMPRINT,
                                 meshable=ON,
@@ -128,9 +135,6 @@ for pt in inner_points_case2:
     dp = p.DatumPointByCoordinate(coords=pt)
     datum_inner_case1.append(p.datums[dp.id])
 
-# ------------------------
-# Create a wire spline using these datum points
-# ------------------------
 wire_inner_case1 = p.WireSpline(points=datum_inner_case1,
                                 mergeType=IMPRINT,
                                 meshable=ON,
@@ -141,9 +145,6 @@ for pt in outer_points_case2:
     dp = p.DatumPointByCoordinate(coords=pt)
     datum_inner_case1.append(p.datums[dp.id])
 
-# ------------------------
-# Create a wire spline using these datum points
-# ------------------------
 wire_inner_case1 = p.WireSpline(points=datum_inner_case1,
                                 mergeType=IMPRINT,
                                 meshable=ON,
@@ -154,9 +155,6 @@ for pt in inner_points_case3:
     dp = p.DatumPointByCoordinate(coords=pt)
     datum_inner_case1.append(p.datums[dp.id])
 
-# ------------------------
-# Create a wire spline using these datum points
-# ------------------------
 wire_inner_case1 = p.WireSpline(points=datum_inner_case1,
                                 mergeType=IMPRINT,
                                 meshable=ON,
@@ -167,16 +165,12 @@ for pt in outer_points_case3:
     dp = p.DatumPointByCoordinate(coords=pt)
     datum_inner_case1.append(p.datums[dp.id])
 
-# ------------------------
-# Create a wire spline using these datum points
-# ------------------------
 wire_inner_case1 = p.WireSpline(points=datum_inner_case1,
                                 mergeType=IMPRINT,
                                 meshable=ON,
                                 smoothClosedSpline=ON)
-p.regenerate()
 
-dp_inner_case1 = inner_points_case1  # list of (x, y, z)
+dp_inner_case1 = inner_points_case1
 dp_inner_case2 = inner_points_case2
 dp_inner_case3 = inner_points_case3
 
@@ -190,3 +184,72 @@ e1 = p.edges
 p.SolidLoft(loftsections=((e1.findAt(coordinates=(dp_outer_case1[mid_idx])), e1.findAt(coordinates=(dp_outer_case2[mid_idx])), e1.findAt(coordinates=( dp_outer_case3[mid_idx]))), 
                           (e1.findAt(coordinates=(dp_inner_case1[mid_idx])), e1.findAt(coordinates=(dp_inner_case2[mid_idx])), e1.findAt( coordinates=(dp_inner_case3[mid_idx])))), 
                           startCondition=NONE, endCondition=NONE)
+
+p.regenerate()
+
+############ Material properties ############
+model.Material(name='Aluminium')
+model.materials['Aluminium'].Elastic(table=((70000.0,0.34), ))
+
+############ Section assignment ############
+model.HomogeneousSolidSection(name='AL_section', 
+    material='Aluminium', thickness=None)
+p = mdb.models['SuperEllipse'].parts['SuperEllipsoid']
+
+long = math.pi / 4      # longitude
+lat = math.pi / 4  # latitude
+q = a + t/2
+w = b + t/2
+e = c + t/2
+x, y, z = superellipsoid_point_3d(lat, long, q, w, e, n1, n2)
+picked_point = (x, y, z)
+c = p.cells
+cells = c.findAt(((x,y,z), ))
+region = regionToolset.Region(cells=cells)
+p.SectionAssignment(region=region, sectionName='AL_section', offset=0.0, 
+    offsetType=MIDDLE_SURFACE, offsetField='', 
+    thicknessAssignment=FROM_SECTION)
+
+############ Assembly ############
+a1 = mdb.models['SuperEllipse'].rootAssembly
+a1.DatumCsysByDefault(CARTESIAN)
+p = mdb.models['SuperEllipse'].parts['SuperEllipsoid']
+a1.Instance(name='SuperEllipsoid-1', part=p, dependent=OFF)
+session.viewports['Viewport: 1'].view.setProjection(projection=PARALLEL)
+
+############ Partitioning ############
+p = mdb.models['SuperEllipse'].parts['SuperEllipsoid']
+dp = p.DatumPlaneByPrincipalPlane(principalPlane=YZPLANE, offset=0.0)
+datumPlane0 = p.datums[dp.id]
+
+p.DatumCsysByThreePoints(name='Datum csys-1', coordSysType=CARTESIAN, origin=(
+    0.0, 0.0, 0.0), point1=(1.0, 0.0, 1.0), point2=(0.0, 1.0, 0.0))
+
+angle_increment = 90.0 / n_long
+d = p.datums
+for i in range(1, n_long):
+    angle = i * angle_increment
+    dp_rot = p.DatumPlaneByRotation(plane=datumPlane0, axis=d[262].axis2, angle=angle)
+    dp_rot_obj = p.datums[dp_rot.id]
+    current_cells = p.cells.getByBoundingBox(
+        xMin=-1e6, xMax=1e6,
+        yMin=-1e6, yMax=1e6,
+        zMin=-1e6, zMax=1e6
+    )
+    p.PartitionCellByDatumPlane(datumPlane=dp_rot_obj, cells=current_cells)
+
+dp = p.DatumPlaneByPrincipalPlane(principalPlane=XZPLANE, offset=0.0)
+datumPlane0 = p.datums[dp.id]
+
+angle_increment = 90.0 / n_long
+d = p.datums
+for i in range(1, n_long):
+    angle = i * angle_increment
+    dp_rot = p.DatumPlaneByRotation(plane=datumPlane0, axis=d[262].axis3, angle=angle)
+    dp_rot_obj = p.datums[dp_rot.id]
+    current_cells = p.cells.getByBoundingBox(
+        xMin=-1e6, xMax=1e6,
+        yMin=-1e6, yMax=1e6,
+        zMin=-1e6, zMax=1e6
+    )
+    p.PartitionCellByDatumPlane(datumPlane=dp_rot_obj, cells=current_cells)
