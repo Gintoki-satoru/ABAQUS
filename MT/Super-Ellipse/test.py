@@ -51,6 +51,27 @@ def superellipsoid_point_3d(phi, theta, a, b, c, n1, n2):
     z = c * signed_power(sin_phi, 2.0/n1)
     return x, y, z
 
+def surface_normal(phi, theta, a, b, c, n1, n2, h=1e-6):
+    """Approximate normal via finite differences."""
+    # Base point
+    p0 = superellipsoid_point_3d(phi, theta, a, b, c, n1, n2)
+    # Slightly offset in phi and theta
+    p_phi = superellipsoid_point_3d(phi + h, theta, a, b, c, n1, n2)
+    p_theta = superellipsoid_point_3d(phi, theta + h, a, b, c, n1, n2)
+    # Tangent vectors
+    t_phi = [p_phi[i] - p0[i] for i in range(3)]
+    t_theta = [p_theta[i] - p0[i] for i in range(3)]
+    # Cross product t_phi × t_theta
+    nx = t_phi[1]*t_theta[2] - t_phi[2]*t_theta[1]
+    ny = t_phi[2]*t_theta[0] - t_phi[0]*t_theta[2]
+    nz = t_phi[0]*t_theta[1] - t_phi[1]*t_theta[0]
+    # Normalize
+    norm = math.sqrt(nx**2 + ny**2 + nz**2)
+    return (nx/norm, ny/norm, nz/norm)
+
+def offset_point_along_normal(point, normal, t):
+    return tuple(point[i] + t*normal[i] for i in range(3))
+
 # ------------------------
 # Case 1: phi = 0, theta = 0 → 90 deg
 # ------------------------
@@ -60,8 +81,11 @@ phi_case1 = 0.0
 inner_points_case1 = []
 outer_points_case1 = []
 for theta in theta_vals:
-    inner_points_case1.append(superellipsoid_point_3d(phi_case1, theta, a, b, c, n1, n2))
-    outer_points_case1.append(superellipsoid_point_3d(phi_case1, theta, a_out, b_out, c_out, n1, n2))
+    p_inner = superellipsoid_point_3d(phi_case1, theta, a, b, c, n1, n2)
+    n_vec = surface_normal(phi_case1, theta, a, b, c, n1, n2)
+    p_outer = offset_point_along_normal(p_inner, n_vec, t)
+    inner_points_case1.append(p_inner)
+    outer_points_case1.append(p_outer)
 
 # ------------------------
 # Case 2: phi = 0 → 90 deg, theta = 0
@@ -72,8 +96,11 @@ theta_case2 = 0.0
 inner_points_case2 = []
 outer_points_case2 = []
 for phi in phi_vals:
-    inner_points_case2.append(superellipsoid_point_3d(phi, theta_case2, a, b, c, n1, n2))
-    outer_points_case2.append(superellipsoid_point_3d(phi, theta_case2, a_out, b_out, c_out, n1, n2))
+    p_inner = superellipsoid_point_3d(phi, theta_case2, a, b, c, n1, n2)
+    n_vec = surface_normal(phi, theta_case2, a, b, c, n1, n2)
+    p_outer = offset_point_along_normal(p_inner, n_vec, t)
+    inner_points_case2.append(p_inner)
+    outer_points_case2.append(p_outer)
 
 # ------------------------
 # Case 3: phi = 0 → 90 deg, theta = 90 deg
@@ -83,8 +110,11 @@ theta_case3 = math.radians(90)
 inner_points_case3 = []
 outer_points_case3 = []
 for phi in phi_vals:
-    inner_points_case3.append(superellipsoid_point_3d(phi, theta_case3, a, b, c, n1, n2))
-    outer_points_case3.append(superellipsoid_point_3d(phi, theta_case3, a_out, b_out, c_out, n1, n2))
+    p_inner = superellipsoid_point_3d(phi, theta_case3, a, b, c, n1, n2)
+    n_vec = surface_normal(phi, theta_case3, a, b, c, n1, n2)
+    p_outer = offset_point_along_normal(p_inner, n_vec, t)
+    inner_points_case3.append(p_inner)
+    outer_points_case3.append(p_outer)
 
 # Case2[-1] = Case3[-1]
 inner_points_case2[-1] = inner_points_case3[-1]
