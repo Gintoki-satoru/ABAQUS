@@ -233,8 +233,8 @@ w = b + t/2
 e = c + t/2
 x, y, z = superellipsoid_point_3d(lat, long, q, w, e, n1, n2)
 picked_point = (x, y, z)
-c = p.cells
-cells = c.findAt(((x,y,z), ))
+c1 = p.cells
+cells = c1.findAt(((x,y,z), ))
 region = regionToolset.Region(cells=cells)
 p.SectionAssignment(region=region, sectionName='AL_section', offset=0.0, 
     offsetType=MIDDLE_SURFACE, offsetField='', 
@@ -248,7 +248,9 @@ a1.Instance(name='SuperEllipsoid-1', part=p, dependent=OFF)
 session.viewports['Viewport: 1'].view.setProjection(projection=PARALLEL)
 
 ############ Partitioning ############
-p = mdb.models['SuperEllipse'].parts['SuperEllipsoid']
+
+#### Strat - 1 ####
+"""p = mdb.models['SuperEllipse'].parts['SuperEllipsoid']
 dp = p.DatumPlaneByPrincipalPlane(principalPlane=YZPLANE, offset=0.0)
 datumPlane0 = p.datums[dp.id]
 
@@ -278,7 +280,7 @@ for i in range(1, n_long):
     )
     p.PartitionFaceByDatumPlane(datumPlane=dp_rot_obj, faces=current_cells)
 
-"""dp = p.DatumPlaneByPrincipalPlane(principalPlane=XZPLANE, offset=0.0)
+dp = p.DatumPlaneByPrincipalPlane(principalPlane=XZPLANE, offset=0.0)
 datumPlane0 = p.datums[dp.id]
 
 angle_increment = 90.0 / n_long
@@ -293,3 +295,39 @@ for i in range(1, n_long):
         zMin=-1e6, zMax=1e6
     )
     p.PartitionFaceByDatumPlane(datumPlane=dp_rot_obj, faces=current_cells)"""
+
+#### Strat - 2 ####
+p = mdb.models['SuperEllipse'].parts['SuperEllipsoid']
+dp_xy = p.DatumPlaneByPrincipalPlane(principalPlane=XYPLANE, offset=0.0)
+datumPlane0 = p.datums[dp_xy.id]
+
+n_partitions = 4
+total_length = c
+dz = total_length / n_partitions
+
+for i in range(1, n_partitions):
+    offset = i * dz
+    dp_offset = p.DatumPlaneByOffset(plane=datumPlane0, flip=SIDE1, offset=offset)
+    dp_offset_obj = p.datums[dp_offset.id]
+    current_cells = p.cells.getByBoundingBox(
+        xMin=-1e6, xMax=1e6,
+        yMin=-1e6, yMax=1e6,
+        zMin=-1e6, zMax=1e6
+    )
+    p.PartitionCellByDatumPlane(datumPlane=dp_offset_obj, cells=current_cells)
+
+dp_yz = p.DatumPlaneByPrincipalPlane(principalPlane=YZPLANE, offset=0.0)
+datumPlane1 = p.datums[dp_yz.id]
+
+for i in range(1, n_partitions):
+    offset = i * dz
+    dp_offset = p.DatumPlaneByOffset(plane=datumPlane1, flip=SIDE1, offset=offset)
+    dp_offset_obj = p.datums[dp_offset.id]
+    current_cells = p.cells.getByBoundingBox(
+        xMin=-1e6, xMax=1e6,
+        yMin=-1e6, yMax=1e6,
+        zMin=-1e6, zMax=1e6
+    )
+    p.PartitionCellByDatumPlane(datumPlane=dp_offset_obj, cells=current_cells)
+    
+    
