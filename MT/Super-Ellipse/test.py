@@ -20,7 +20,7 @@ session.journalOptions.setValues(replayGeometry=COORDINATE, recoverGeometry=COOR
 a, b, c = 150.0, 100.0, 150.0   # semi-axes
 t = 2.5                         # thickness
 n1, n2 = 2, 2           # shape exponents
-num_points = 20                 # resolution along curve
+num_points = 30                 # resolution along curve
 n_long = 4  # number of longitudinal partitions
 
 a_out, b_out, c_out = a + t, b + t, c + t
@@ -252,23 +252,33 @@ p = mdb.models['SuperEllipse'].parts['SuperEllipsoid']
 dp = p.DatumPlaneByPrincipalPlane(principalPlane=YZPLANE, offset=0.0)
 datumPlane0 = p.datums[dp.id]
 
-p.DatumCsysByThreePoints(name='Datum csys-1', coordSysType=CARTESIAN, origin=(
-    0.0, 0.0, 0.0), point1=(1.0, 0.0, 1.0), point2=(0.0, 1.0, 0.0))
+csys = p.DatumCsysByThreePoints(
+    name='Datum csys-1',
+    coordSysType=CARTESIAN,
+    origin=(0.0, 0.0, 0.0),
+    point1=(1.0, 0.0, 1.0),
+    point2=(0.0, 1.0, 0.0)
+)
+csys_id = csys.id
+d = p.datums
 
 angle_increment = 90.0 / n_long
-d = p.datums
 for i in range(1, n_long):
     angle = i * angle_increment
-    dp_rot = p.DatumPlaneByRotation(plane=datumPlane0, axis=d[262].axis2, angle=angle)
+    dp_rot = p.DatumPlaneByRotation(
+        plane=datumPlane0,
+        axis=d[csys_id].axis2,
+        angle=angle
+    )
     dp_rot_obj = p.datums[dp_rot.id]
-    current_cells = p.cells.getByBoundingBox(
+    current_cells = p.faces.getByBoundingBox(
         xMin=-1e6, xMax=1e6,
         yMin=-1e6, yMax=1e6,
         zMin=-1e6, zMax=1e6
     )
-    p.PartitionCellByDatumPlane(datumPlane=dp_rot_obj, cells=current_cells)
+    p.PartitionFaceByDatumPlane(datumPlane=dp_rot_obj, faces=current_cells)
 
-dp = p.DatumPlaneByPrincipalPlane(principalPlane=XZPLANE, offset=0.0)
+"""dp = p.DatumPlaneByPrincipalPlane(principalPlane=XZPLANE, offset=0.0)
 datumPlane0 = p.datums[dp.id]
 
 angle_increment = 90.0 / n_long
@@ -277,9 +287,9 @@ for i in range(1, n_long):
     angle = i * angle_increment
     dp_rot = p.DatumPlaneByRotation(plane=datumPlane0, axis=d[262].axis3, angle=angle)
     dp_rot_obj = p.datums[dp_rot.id]
-    current_cells = p.cells.getByBoundingBox(
+    current_cells = p.faces.getByBoundingBox(
         xMin=-1e6, xMax=1e6,
         yMin=-1e6, yMax=1e6,
         zMin=-1e6, zMax=1e6
     )
-    p.PartitionCellByDatumPlane(datumPlane=dp_rot_obj, cells=current_cells)
+    p.PartitionFaceByDatumPlane(datumPlane=dp_rot_obj, faces=current_cells)"""
