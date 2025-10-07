@@ -19,7 +19,7 @@ session.journalOptions.setValues(replayGeometry=COORDINATE, recoverGeometry=COOR
 ################ Parameters #####################
 a, b, c = 150.0, 100.0, 150.0   # semi-axes
 t = 2.5                         # thickness
-n1, n2 = 2, 2           # shape exponents
+n1, n2 = 1, 1           # shape exponents
 num_points = 20                 # resolution along curve
 n_long = 4  # number of longitudinal partitions
 
@@ -266,7 +266,7 @@ for i in range(1, n_long):
     p.PartitionFaceByDatumPlane(datumPlane=dp_rot_obj, faces=current_cells)"""
 
 #### Strat - 2 ####
-p = mdb.models['SuperEllipse'].parts['SuperEllipsoid']
+'''p = mdb.models['SuperEllipse'].parts['SuperEllipsoid']
 dp_xy = p.DatumPlaneByPrincipalPlane(principalPlane=XYPLANE, offset=0.0)
 datumPlane0 = p.datums[dp_xy.id]
 
@@ -298,4 +298,4 @@ for i in range(1, n_partitions):
         zMin=-1e6, zMax=1e6
     )
     p.PartitionCellByDatumPlane(datumPlane=dp_offset_obj, cells=current_cells)
-    
+    '''

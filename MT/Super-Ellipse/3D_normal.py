@@ -17,11 +17,12 @@ session.journalOptions.setValues(replayGeometry=COORDINATE, recoverGeometry=COOR
 
 
 ################ Parameters #####################
-a, b, c = 150.0, 100.0, 150.0   # semi-axes
+a, b, c = 150.0, 100.0, 150.0   # semi-axes outer points
 t = 2.5                         # thickness
-n1, n2 = 2, 2           # shape exponents
-num_points = 30                 # resolution along curve
-n_long = 4  # number of longitudinal partitions
+n1, n2 = 2, 2                   # shape exponents
+num_points = 20                 # resolution along curve
+n_long = 4                      # number of longitudinal partitions
+num_layers = 4                  # number of layers including inner & outer through thickness
 
 a_out, b_out, c_out = a + t, b + t, c + t
 
@@ -73,52 +74,52 @@ def offset_point_along_normal(point, normal, t):
     return tuple(point[i] + t*normal[i] for i in range(3))
 
 # ------------------------
+# Layer offsets
+# ------------------------
+t_vals = [i * t/(num_layers-1) for i in range(num_layers)]  # 0 → t
+
+# ------------------------
+# Function to generate points for a case
+# ------------------------
+def generate_case_points(phi_vals, theta_vals):
+    all_layers = [[] for _ in range(num_layers)]
+    for phi in phi_vals:
+        for j, theta in enumerate(theta_vals):
+            p_base = superellipsoid_point_3d(phi, theta, a, b, c, n1, n2)
+            n_vec = surface_normal(phi, theta, a, b, c, n1, n2)
+            for i, t_i in enumerate(t_vals):
+                all_layers[i].append(offset_point_along_normal(p_base, n_vec, t_i))
+    return all_layers
+
+# ------------------------
 # Case 1: phi = 0, theta = 0 → 90 deg
 # ------------------------
-theta_vals = [math.radians(i*90/num_points) for i in range(num_points+1)]
-phi_case1 = 0.0
-
-inner_points_case1 = []
-outer_points_case1 = []
-for theta in theta_vals:
-    p_inner = superellipsoid_point_3d(phi_case1, theta, a, b, c, n1, n2)
-    n_vec = surface_normal(phi_case1, theta, a, b, c, n1, n2)
-    p_outer = offset_point_along_normal(p_inner, n_vec, t)
-    inner_points_case1.append(p_inner)
-    outer_points_case1.append(p_outer)
+theta_vals_case1 = [math.radians(i*90/num_points) for i in range(num_points+1)]
+phi_case1 = [0.0]
+layers_case1 = generate_case_points(phi_case1, theta_vals_case1)
 
 # ------------------------
 # Case 2: phi = 0 → 90 deg, theta = 0
 # ------------------------
-phi_vals = [math.radians(i*90/num_points) for i in range(num_points+1)]
-theta_case2 = 0.0
-
-inner_points_case2 = []
-outer_points_case2 = []
-for phi in phi_vals:
-    p_inner = superellipsoid_point_3d(phi, theta_case2, a, b, c, n1, n2)
-    n_vec = surface_normal(phi, theta_case2, a, b, c, n1, n2)
-    p_outer = offset_point_along_normal(p_inner, n_vec, t)
-    inner_points_case2.append(p_inner)
-    outer_points_case2.append(p_outer)
+phi_vals_case2 = [math.radians(i*90/num_points) for i in range(num_points+1)]
+theta_case2 = [0.0]
+layers_case2 = generate_case_points(phi_vals_case2, theta_case2)
 
 # ------------------------
 # Case 3: phi = 0 → 90 deg, theta = 90 deg
 # ------------------------
-theta_case3 = math.radians(90)
+theta_case3 = [math.radians(90)]
+layers_case3 = generate_case_points(phi_vals_case2, theta_case3)
 
-inner_points_case3 = []
-outer_points_case3 = []
-for phi in phi_vals:
-    p_inner = superellipsoid_point_3d(phi, theta_case3, a, b, c, n1, n2)
-    n_vec = surface_normal(phi, theta_case3, a, b, c, n1, n2)
-    p_outer = offset_point_along_normal(p_inner, n_vec, t)
-    inner_points_case3.append(p_inner)
-    outer_points_case3.append(p_outer)
-
-# Case2[-1] = Case3[-1]
-inner_points_case2[-1] = inner_points_case3[-1]
-outer_points_case2[-1] = outer_points_case3[-1]
+# ------------------------
+# last point of case2 = last of case3
+# ------------------------
+for i in range(num_layers):
+    layers_case2[i][-1] = layers_case3[i][-1]
+    '''y_val = layers_case3[i][0][1]
+    layers_case1[i][-1] = (0.0, y_val, 0.0)
+    layers_case3[i][0] = (0.0, y_val, 0.0)
+    layers_case1[i][0] = layers_case2[i][0]'''
 
 # ------------------------
 # Create datum points
@@ -127,94 +128,49 @@ def create_datums(point_list):
     for pt in point_list:
         p.DatumPointByCoordinate(coords=pt)
 
-# Case 1
-create_datums(inner_points_case1 + outer_points_case1)
+# Add all layers for each case
+for i in range(num_layers):
+    create_datums(layers_case1[i])
+    create_datums(layers_case2[i])
+    create_datums(layers_case3[i])
 
-# Case 2
-create_datums(inner_points_case2 + outer_points_case2)
+all_wires = []
 
-# Case 3
-create_datums(inner_points_case3 + outer_points_case3)
+for layer_idx in range(num_layers):
+    datum_layer = []
+    # Case 1 points
+    for pt in layers_case1[layer_idx]:
+        dp = p.DatumPointByCoordinate(coords=pt)
+        datum_layer.append(p.datums[dp.id])
+    wire_case1 = p.WireSpline(points=datum_layer, mergeType=IMPRINT, meshable=ON, smoothClosedSpline=ON)
+    all_wires.append(wire_case1)
+    datum_layer = []
+    # Case 2 points
+    for pt in layers_case2[layer_idx]:
+        dp = p.DatumPointByCoordinate(coords=pt)
+        datum_layer.append(p.datums[dp.id])
+    wire_case2 = p.WireSpline(points=datum_layer, mergeType=IMPRINT, meshable=ON, smoothClosedSpline=ON)
+    all_wires.append(wire_case2)
+    datum_layer = []
+    # Case 3 points
+    for pt in layers_case3[layer_idx]:
+        dp = p.DatumPointByCoordinate(coords=pt)
+        datum_layer.append(p.datums[dp.id])
+    wire_case3 = p.WireSpline(points=datum_layer, mergeType=IMPRINT, meshable=ON, smoothClosedSpline=ON)
+    all_wires.append(wire_case3)
 
-# ------------------------
-# Create a wire spline using these datum points
-# ------------------------
+e = p.edges
+loft_sections = []
+for layer_idx in range(num_layers):
+    mid_idx = len(layers_case1[layer_idx]) // 2
+    section = (
+        e.findAt(coordinates=layers_case1[layer_idx][mid_idx]),
+        e.findAt(coordinates=layers_case2[layer_idx][mid_idx]),
+        e.findAt(coordinates=layers_case3[layer_idx][mid_idx])
+    )
+    loft_sections.append(section)
 
-datum_inner_case1 = []
-for pt in inner_points_case1:
-    dp = p.DatumPointByCoordinate(coords=pt)
-    datum_inner_case1.append(p.datums[dp.id])
-
-wire_inner_case1 = p.WireSpline(points=datum_inner_case1,
-                                mergeType=IMPRINT,
-                                meshable=ON,
-                                smoothClosedSpline=ON)
-
-datum_inner_case1 = []
-for pt in outer_points_case1:
-    dp = p.DatumPointByCoordinate(coords=pt)
-    datum_inner_case1.append(p.datums[dp.id])
-
-wire_inner_case1 = p.WireSpline(points=datum_inner_case1,
-                                mergeType=IMPRINT,
-                                meshable=ON,
-                                smoothClosedSpline=ON)
-
-datum_inner_case1 = []
-for pt in inner_points_case2:
-    dp = p.DatumPointByCoordinate(coords=pt)
-    datum_inner_case1.append(p.datums[dp.id])
-
-wire_inner_case1 = p.WireSpline(points=datum_inner_case1,
-                                mergeType=IMPRINT,
-                                meshable=ON,
-                                smoothClosedSpline=ON)
-
-datum_inner_case1 = []
-for pt in outer_points_case2:
-    dp = p.DatumPointByCoordinate(coords=pt)
-    datum_inner_case1.append(p.datums[dp.id])
-
-wire_inner_case1 = p.WireSpline(points=datum_inner_case1,
-                                mergeType=IMPRINT,
-                                meshable=ON,
-                                smoothClosedSpline=ON)
-
-datum_inner_case1 = []
-for pt in inner_points_case3:
-    dp = p.DatumPointByCoordinate(coords=pt)
-    datum_inner_case1.append(p.datums[dp.id])
-
-wire_inner_case1 = p.WireSpline(points=datum_inner_case1,
-                                mergeType=IMPRINT,
-                                meshable=ON,
-                                smoothClosedSpline=ON)
-
-datum_inner_case1 = []
-for pt in outer_points_case3:
-    dp = p.DatumPointByCoordinate(coords=pt)
-    datum_inner_case1.append(p.datums[dp.id])
-
-wire_inner_case1 = p.WireSpline(points=datum_inner_case1,
-                                mergeType=IMPRINT,
-                                meshable=ON,
-                                smoothClosedSpline=ON)
-
-dp_inner_case1 = inner_points_case1
-dp_inner_case2 = inner_points_case2
-dp_inner_case3 = inner_points_case3
-
-dp_outer_case1 = outer_points_case1
-dp_outer_case2 = outer_points_case2
-dp_outer_case3 = outer_points_case3
-
-mid_idx = len(dp_inner_case1) // 2
-
-e1 = p.edges
-p.SolidLoft(loftsections=((e1.findAt(coordinates=(dp_outer_case1[mid_idx])), e1.findAt(coordinates=(dp_outer_case2[mid_idx])), e1.findAt(coordinates=( dp_outer_case3[mid_idx]))), 
-                          (e1.findAt(coordinates=(dp_inner_case1[mid_idx])), e1.findAt(coordinates=(dp_inner_case2[mid_idx])), e1.findAt( coordinates=(dp_inner_case3[mid_idx])))), 
-                          startCondition=NONE, endCondition=NONE)
-
+p.SolidLoft(loftsections=loft_sections, startCondition=NONE, endCondition=NONE)
 p.regenerate()
 
 ############ Material properties ############
@@ -227,10 +183,10 @@ model.HomogeneousSolidSection(name='AL_section',
 p = mdb.models['SuperEllipse'].parts['SuperEllipsoid']
 
 long = math.pi / 4      # longitude
-lat = math.pi / 4  # latitude
-q = a + t/2
-w = b + t/2
-e = c + t/2
+lat = math.pi / 4       # latitude
+q = a
+w = b
+e = c
 x, y, z = superellipsoid_point_3d(lat, long, q, w, e, n1, n2)
 picked_point = (x, y, z)
 c1 = p.cells
@@ -250,7 +206,7 @@ session.viewports['Viewport: 1'].view.setProjection(projection=PARALLEL)
 ############ Partitioning ############
 
 #### Strat - 1 ####
-"""p = mdb.models['SuperEllipse'].parts['SuperEllipsoid']
+'''p = mdb.models['SuperEllipse'].parts['SuperEllipsoid']
 dp = p.DatumPlaneByPrincipalPlane(principalPlane=YZPLANE, offset=0.0)
 datumPlane0 = p.datums[dp.id]
 
@@ -287,14 +243,14 @@ angle_increment = 90.0 / n_long
 d = p.datums
 for i in range(1, n_long):
     angle = i * angle_increment
-    dp_rot = p.DatumPlaneByRotation(plane=datumPlane0, axis=d[262].axis3, angle=angle)
+    dp_rot = p.DatumPlaneByRotation(plane=datumPlane0, axis=d[csys_id].axis3, angle=angle)
     dp_rot_obj = p.datums[dp_rot.id]
     current_cells = p.faces.getByBoundingBox(
         xMin=-1e6, xMax=1e6,
         yMin=-1e6, yMax=1e6,
         zMin=-1e6, zMax=1e6
     )
-    p.PartitionFaceByDatumPlane(datumPlane=dp_rot_obj, faces=current_cells)"""
+    p.PartitionFaceByDatumPlane(datumPlane=dp_rot_obj, faces=current_cells)
 
 #### Strat - 2 ####
 p = mdb.models['SuperEllipse'].parts['SuperEllipsoid']
@@ -329,5 +285,5 @@ for i in range(1, n_partitions):
         zMin=-1e6, zMax=1e6
     )
     p.PartitionCellByDatumPlane(datumPlane=dp_offset_obj, cells=current_cells)
-    
+    '''
     

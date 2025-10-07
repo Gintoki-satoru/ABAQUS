@@ -39,7 +39,7 @@ from abaqusConstants import DOMAIN  # For job parallelization
 from abaqusConstants import ELEMENT_NODAL, INTEGRATION_POINT  # For post-processing
 from abaqusConstants import STRUCTURED, FREE  # Additional mesh techniques
 
-path_modules = 'C:\\Users\\psachdeva\Documents\\01_Promotion\\04_MT\\05_scripts\\fe_abaqus_macro'
+path_modules = 'D:\\psingh\\MT\\ABAQUS\\MT'
 os.chdir(path_modules)
 
 # Further packages:
@@ -53,7 +53,7 @@ modelName = '0_90_S'
 plyAngle = [0,90,90,0]
 
 # Definition des Pfades zur Sicherung der gesamten FE-Analyse: 
-analysis_Path = 'C:\\Users\\psachdeva\\Documents\\01_Promotion\\01_ANA_2.1\\FE\\vessel_3D'
+analysis_Path = 'D:\\psingh\\MT\\Fe'
 
 # Bestimmung des Zeitpunktes der FE-Analyse:
 analysis_currentDateTime = dt.datetime.now().strftime("%Y_%m_%d_%H_%M_%S")
