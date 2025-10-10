@@ -229,3 +229,52 @@ for i in range(1, n_partitions):
     p.PartitionCellByDatumPlane(datumPlane=dp_offset_obj, cells=current_cells)'''
 
 #### Strat - 3 ####
+def surface_normal(phi, theta, a, b, c, n1, n2, h=1e-6):
+    """Approximate normal via finite differences."""
+    p0 = superellipsoid_point_3d(phi, theta, a, b, c, n1, n2)
+    p_phi = superellipsoid_point_3d(phi + h, theta, a, b, c, n1, n2)
+    p_theta = superellipsoid_point_3d(phi, theta + h, a, b, c, n1, n2)
+    t_phi = [p_phi[i] - p0[i] for i in range(3)]
+    t_theta = [p_theta[i] - p0[i] for i in range(3)]
+    nx = t_phi[1]*t_theta[2] - t_phi[2]*t_theta[1]
+    ny = t_phi[2]*t_theta[0] - t_phi[0]*t_theta[2]
+    nz = t_phi[0]*t_theta[1] - t_phi[1]*t_theta[0]
+    norm = math.sqrt(nx**2 + ny**2 + nz**2)
+    return (nx/norm, ny/norm, nz/norm)
+
+def offset_point_along_normal(point, normal, t):
+    return tuple(point[i] + t*normal[i] for i in range(3))
+
+num_partitions = 4
+theta_case = math.radians(90)
+phi_vals = [i * math.pi/2 / num_partitions for i in range(1, num_partitions)]
+
+for phi_example in phi_vals:
+    # 1️⃣ Compute inner and outer points
+    pt_inner = superellipsoid_point_3d(phi_example, theta_case, a, b, c, n1, n2)
+    pt_outer = superellipsoid_point_3d(phi_example, theta_case, a_out, b_out, c_out, n1, n2)
+    # 2️⃣ Compute normal and adjust points slightly
+    n_vec = surface_normal(phi_example, theta_case, a, b, c, n1, n2)
+    pt_inner_adj = offset_point_along_normal(pt_inner, n_vec, -1e-4)
+    pt_outer_adj = offset_point_along_normal(pt_outer, n_vec, +1e-4)
+    # 3️⃣ Create datum points
+    datum_inner = p.DatumPointByCoordinate(coords=pt_inner_adj)
+    datum_outer = p.DatumPointByCoordinate(coords=pt_outer_adj)
+    datum_xy = p.DatumPointByCoordinate(coords=(pt_inner_adj[2], pt_inner_adj[1], pt_inner_adj[0]))
+    # 4️⃣ Create datum plane by three points
+    plane_datum = p.DatumPlaneByThreePoints(
+        point1=p.datums[datum_inner.id],
+        point2=p.datums[datum_outer.id],
+        point3=p.datums[datum_xy.id]
+    )
+    # 5️⃣ Select entire part using bounding box
+    cell_to_partition = p.cells.getByBoundingBox(
+        xMin=-1e6, xMax=1e6,
+        yMin=-1e6, yMax=1e6,
+        zMin=-1e6, zMax=1e6
+    )
+    # 6️⃣ Partition the selected cell using the datum plane
+    p.PartitionCellByDatumPlane(
+        cells=cell_to_partition,
+        datumPlane=p.datums[plane_datum.id]
+    )
