@@ -203,8 +203,8 @@ w = b + t/2
 e = c + t/2
 x, y, z = superellipsoid_point_3d(lat, long, q, w, e, n1, n2)
 picked_point = (x, y, z)
-c = p.cells
-cells = c.findAt(((x,y,z), ))
+c1 = p.cells
+cells = c1.findAt(((x,y,z), ))
 region = regionToolset.Region(cells=cells)
 p.SectionAssignment(region=region, sectionName='AL_section', offset=0.0, 
     offsetType=MIDDLE_SURFACE, offsetField='', 
@@ -218,6 +218,7 @@ a1.Instance(name='SuperEllipsoid-1', part=p, dependent=OFF)
 session.viewports['Viewport: 1'].view.setProjection(projection=PARALLEL)
 
 ############ Partitioning ############
+'''
 p = mdb.models['SuperEllipse'].parts['SuperEllipsoid']
 csys = p.DatumCsysByThreePoints(
     name='Datum csys-1',
@@ -257,39 +258,81 @@ for i in range(1, n_long):
         zMin=-1e6, zMax=1e6
     )
     p.PartitionCellByDatumPlane(datumPlane=dp_rot_obj, cells=current_cells)
+'''
 
+#### Strat - 2 ####
 
-p = mdb.models['SuperEllipse'].parts['SuperEllipsoid']
-p.DatumPlaneByPrincipalPlane(principalPlane=XZPLANE, offset=152.5)
-p.DatumPointByCoordinate(coords=(0.0, 152.5, 0.0))
-f, e, d = p.faces, p.edges, p.datums
-t = p.MakeSketchTransform(sketchPlane=d[4], sketchUpEdge=e.findAt(coordinates=(
-    140.891557, 0.0, 58.359393)), sketchPlaneSide=SIDE1, origin=(16.38815, 
-    152.5, 16.38815))
-s = mdb.models['SuperEllipse'].ConstrainedSketch(name='__profile__', 
-    sheetSize=914.04, gridSpacing=22.85, transform=t)
-g, v, d1, c = s.geometry, s.vertices, s.dimensions, s.constraints
-s.setPrimaryObject(option=SUPERIMPOSE)
-p = mdb.models['SuperEllipse'].parts['SuperEllipsoid']
-p.projectReferencesOntoSketch(sketch=s, filter=COPLANAR_EDGES)
-s.CircleByCenterPerimeter(center=(-16.6340125191169, 16.1385423244747), 
-    point1=(5.7125, 0.0))
-s.ObliqueDimension(vertex1=v.findAt((-16.634013, 16.138542)), vertex2=v.findAt(
-    (5.7125, 0.0)), textPoint=(18.6269860775, 55.8358914094314), value=50.0)
-p = mdb.models['SuperEllipse'].parts['SuperEllipsoid']
+def surface_normal(phi, theta, a, b, c, n1, n2, h=1e-6):
+    """Approximate normal via finite differences."""
+    p0 = superellipsoid_point_3d(phi, theta, a, b, c, n1, n2)
+    p_phi = superellipsoid_point_3d(phi + h, theta, a, b, c, n1, n2)
+    p_theta = superellipsoid_point_3d(phi, theta + h, a, b, c, n1, n2)
+    t_phi = [p_phi[i] - p0[i] for i in range(3)]
+    t_theta = [p_theta[i] - p0[i] for i in range(3)]
+    nx = t_phi[1]*t_theta[2] - t_phi[2]*t_theta[1]
+    ny = t_phi[2]*t_theta[0] - t_phi[0]*t_theta[2]
+    nz = t_phi[0]*t_theta[1] - t_phi[1]*t_theta[0]
+    norm = math.sqrt(nx**2 + ny**2 + nz**2)
+    return (nx/norm, ny/norm, nz/norm)
+
+def offset_point_along_normal(point, normal, t):
+    return tuple(point[i] + t*normal[i] for i in range(3))
+
+# Get the part and faces
 f = p.faces
-pickedFaces = f.findAt(((65.559857, 120.914177, 65.559857), ), ((0.0, 
-    152.229696, 2.494274), ), ((152.229696, 2.494274, 0.0), ), ((65.291169, 
-    120.418627, 65.291169), ), ((0.0, 151.60495, 2.484051), ), ((151.60495, 
-    2.484051, 0.0), ), ((65.022481, 119.923077, 65.022481), ), ((0.0, 
-    150.980204, 2.473829), ), ((150.980204, 2.473829, 0.0), ), ((64.753793, 
-    119.427527, 64.753793), ), ((64.485105, 118.931977, 64.485105), ), ((0.0, 
-    150.355459, 2.463606), ), ((150.355459, 2.463606, 0.0), ))
-f1, e1, d2 = p.faces, p.edges, p.datums
-p.PartitionFaceBySketchThruAll(sketchPlane=d2[4], sketchUpEdge=e1.findAt(
-    coordinates=(140.891557, 0.0, 58.359393)), faces=pickedFaces, 
-    sketchPlaneSide=SIDE1, sketch=s)
-s.unsetPrimaryObject()
-del mdb.models['SuperEllipse'].sketches['__profile__']
+num_partitions = 4
+theta_case = math.radians(90)
+phi_vals = [i * math.pi/2 / num_partitions for i in range(1, num_partitions)]
 
+for phi_example in phi_vals:
+    pt_inner = superellipsoid_point_3d(phi_example, theta_case, a, b, c, n1, n2)
+    pt_outer = superellipsoid_point_3d(phi_example, theta_case, a_out, b_out, c_out, n1, n2)
+    n_vec = surface_normal(phi_example, theta_case, a, b, c, n1, n2)
+    # Slight adjustment along normal (reduces Abaqus tolerance errors)
+    pt_inner_adj = offset_point_along_normal(pt_inner, n_vec, -1e-4)
+    pt_outer_adj = offset_point_along_normal(pt_outer, n_vec, +1e-4)
+    datum_inner = p.DatumPointByCoordinate(coords=pt_inner_adj)
+    datum_outer = p.DatumPointByCoordinate(coords=pt_outer_adj)
+    # Attempt with increasing search tolerance
+    closest_face_result = f.getClosest(coordinates=(pt_inner_adj,), searchTolerance=1e-3)
+    if not closest_face_result:
+        closest_face_result = f.getClosest(coordinates=(pt_inner_adj,), searchTolerance=1e-2)
+    if closest_face_result:
+        closest_face = closest_face_result[0][0]
+        p.PartitionFaceByShortestPath(
+            faces=closest_face,
+            point1=p.datums[datum_inner.id],
+            point2=p.datums[datum_outer.id]
+        )
+    else:
+        print("No nearby face found at:", pt_inner_adj)
 
+phi_case = 0.0
+num_partitions = 4
+theta_vals = [i * math.pi/2 / num_partitions for i in range(1, num_partitions + 1)]
+for theta_example in theta_vals:   
+    # 1️⃣ Compute points on the surface
+    pt_inner = superellipsoid_point_3d(phi_case, theta_example, a, b, c, n1, n2)
+    pt_outer = superellipsoid_point_3d(phi_case, theta_example, a_out, b_out, c_out, n1, n2)
+    # 2️⃣ Compute surface normal
+    n_vec = surface_normal(phi_case, theta_example, a, b, c, n1, n2)
+    # 3️⃣ Adjust for numerical tolerance
+    pt_inner_adj = offset_point_along_normal(pt_inner, n_vec, -1e-4)
+    pt_outer_adj = offset_point_along_normal(pt_outer, n_vec, +1e-4)
+    # 4️⃣ Create datum points
+    datum_inner = p.DatumPointByCoordinate(coords=pt_inner_adj)
+    datum_outer = p.DatumPointByCoordinate(coords=pt_outer_adj)
+    # 5️⃣ Find closest face (with tolerance)
+    closest_face_result = f.getClosest(coordinates=(pt_inner_adj,), searchTolerance=1e-3)
+    if not closest_face_result:
+        closest_face_result = f.getClosest(coordinates=(pt_inner_adj,), searchTolerance=1e-2)
+    # 6️⃣ Partition along the line between inner & outer
+    if closest_face_result:
+        closest_face = closest_face_result[0][0]
+        p.PartitionFaceByShortestPath(
+            faces=closest_face,
+            point1=p.datums[datum_inner.id],
+            point2=p.datums[datum_outer.id]
+        )
+    else:
+        print("No nearby face found at:", pt_inner_adj)
