@@ -24,6 +24,7 @@ model.rootAssembly.regenerate()
 
 ################ Parameters #####################
 a, b, c = 150.0, 150.0, 150.0   # inner semi-axes
+total_length = c
 t = 2.5                         # total thickness
 n1, n2 = 2, 2                   # shape exponents
 num_points = 30                 # points per curve
@@ -143,12 +144,14 @@ region = regionToolset.Region(cells=current_cells)
 p.SectionAssignment(region=region, sectionName='AL_section', offset=0.0, 
     offsetType=MIDDLE_SURFACE, offsetField='', 
     thicknessAssignment=FROM_SECTION)
+mdb.models['SuperEllipse'].parts['SuperEllipsoid'].setValues(
+    geometryRefinement=FINE)
 
 ############ Partitioning ############
 
 #### Strat - 1 ####
 '''
-n_long = 10  # number of longitudinal partitions
+n_long = 4  # number of longitudinal partitions
 p = mdb.models['SuperEllipse'].parts['SuperEllipsoid']
 csys = p.DatumCsysByThreePoints(
     name='Datum csys-1',
@@ -191,7 +194,8 @@ for i in range(1, n_long):
     p.PartitionCellByDatumPlane(datumPlane=dp_rot_obj, cells=current_cells)'''
 
 #### Strat - 2 ####
-'''p = mdb.models['SuperEllipse'].parts['SuperEllipsoid']
+'''
+p = mdb.models['SuperEllipse'].parts['SuperEllipsoid']
 dp_xy = p.DatumPlaneByPrincipalPlane(principalPlane=XYPLANE, offset=0.0)
 datumPlane0 = p.datums[dp_xy.id]
 

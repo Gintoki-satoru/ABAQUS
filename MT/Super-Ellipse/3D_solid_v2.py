@@ -216,6 +216,8 @@ a1.DatumCsysByDefault(CARTESIAN)
 p = mdb.models['SuperEllipse'].parts['SuperEllipsoid']
 a1.Instance(name='SuperEllipsoid-1', part=p, dependent=OFF)
 session.viewports['Viewport: 1'].view.setProjection(projection=PARALLEL)
+mdb.models['SuperEllipse'].parts['SuperEllipsoid'].setValues(
+    geometryRefinement=FINE)
 
 ############ Partitioning ############
 '''
