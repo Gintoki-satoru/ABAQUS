@@ -26,9 +26,10 @@ model.rootAssembly.regenerate()
 a, b, c = 150.0, 150.0, 150.0   # inner semi-axes
 total_length = c
 t = 2.5                         # total thickness
-n1, n2 = 2, 2                   # shape exponents
+n1, n2 = 10, 10                   # shape exponents
 num_points = 30                 # points per curve
 num_layers = 4                  # number of layers through thickness
+num_partitions = 4               # number of partitions
 
 a_out, b_out, c_out = a + t, b + t, c + t  # outer semi-axes
 
@@ -229,6 +230,7 @@ for i in range(1, n_partitions):
     p.PartitionCellByDatumPlane(datumPlane=dp_offset_obj, cells=current_cells)'''
 
 #### Strat - 3 ####
+'''
 def surface_normal(phi, theta, a, b, c, n1, n2, h=1e-6):
     """Approximate normal via finite differences."""
     p0 = superellipsoid_point_3d(phi, theta, a, b, c, n1, n2)
@@ -245,36 +247,136 @@ def surface_normal(phi, theta, a, b, c, n1, n2, h=1e-6):
 def offset_point_along_normal(point, normal, t):
     return tuple(point[i] + t*normal[i] for i in range(3))
 
-num_partitions = 4
 theta_case = math.radians(90)
 phi_vals = [i * math.pi/2 / num_partitions for i in range(1, num_partitions)]
 
 for phi_example in phi_vals:
-    # 1️⃣ Compute inner and outer points
+    # Compute inner and outer points
     pt_inner = superellipsoid_point_3d(phi_example, theta_case, a, b, c, n1, n2)
     pt_outer = superellipsoid_point_3d(phi_example, theta_case, a_out, b_out, c_out, n1, n2)
-    # 2️⃣ Compute normal and adjust points slightly
+    # Compute normal and adjust points slightly
     n_vec = surface_normal(phi_example, theta_case, a, b, c, n1, n2)
     pt_inner_adj = offset_point_along_normal(pt_inner, n_vec, -1e-4)
     pt_outer_adj = offset_point_along_normal(pt_outer, n_vec, +1e-4)
-    # 3️⃣ Create datum points
     datum_inner = p.DatumPointByCoordinate(coords=pt_inner_adj)
     datum_outer = p.DatumPointByCoordinate(coords=pt_outer_adj)
     datum_xy = p.DatumPointByCoordinate(coords=(pt_inner_adj[2], pt_inner_adj[1], pt_inner_adj[0]))
-    # 4️⃣ Create datum plane by three points
     plane_datum = p.DatumPlaneByThreePoints(
         point1=p.datums[datum_inner.id],
         point2=p.datums[datum_outer.id],
         point3=p.datums[datum_xy.id]
     )
-    # 5️⃣ Select entire part using bounding box
     cell_to_partition = p.cells.getByBoundingBox(
         xMin=-1e6, xMax=1e6,
         yMin=-1e6, yMax=1e6,
         zMin=-1e6, zMax=1e6
     )
-    # 6️⃣ Partition the selected cell using the datum plane
     p.PartitionCellByDatumPlane(
         cells=cell_to_partition,
         datumPlane=p.datums[plane_datum.id]
     )
+
+# Final partition near the tip
+
+n = max(n1, n2)
+phi_tip_deg = 23.2 * math.exp(-1.225 * n)
+phi_tip = math.radians(phi_tip_deg)
+
+pt_inner = superellipsoid_point_3d(phi_tip, theta_case, a, b, c, n1, n2)
+pt_outer = superellipsoid_point_3d(phi_tip, theta_case, a_out, b_out, c_out, n1, n2)
+
+n_vec = surface_normal(phi_tip, theta_case, a, b, c, n1, n2)
+pt_inner_adj = offset_point_along_normal(pt_inner, n_vec, -1e-4)
+pt_outer_adj = offset_point_along_normal(pt_outer, n_vec, +1e-4)
+
+datum_inner = p.DatumPointByCoordinate(coords=pt_inner_adj)
+datum_outer = p.DatumPointByCoordinate(coords=pt_outer_adj)
+datum_xy = p.DatumPointByCoordinate(coords=(pt_inner_adj[2], pt_inner_adj[1], pt_inner_adj[0]))
+
+plane_datum = p.DatumPlaneByThreePoints(
+    point1=p.datums[datum_inner.id],
+    point2=p.datums[datum_outer.id],
+    point3=p.datums[datum_xy.id]
+)
+
+cell_to_partition = p.cells.getByBoundingBox(
+    xMin=-1e6, xMax=1e6,
+    yMin=-1e6, yMax=1e6,
+    zMin=-1e6, zMax=1e6
+)
+
+p.PartitionCellByDatumPlane(
+    cells=cell_to_partition,
+    datumPlane=p.datums[plane_datum.id]
+)
+'''
+#### Strat - 4 ####
+def superellipsoid_normal(phi, theta, a, b, c, n1, n2):
+    """Analytical unit normal vector on superellipsoid surface."""
+    cphi, sphi = math.cos(phi), math.sin(phi)
+    ctheta, stheta = math.cos(theta), math.sin(theta)
+    # Use your signed_power(base, exp)
+    nx = (1.0 / a) * signed_power(cphi, 2 - 2/n1) * signed_power(ctheta, 2 - 2/n2)
+    ny = (1.0 / b) * signed_power(cphi, 2 - 2/n1) * signed_power(stheta, 2 - 2/n2)
+    nz = (1.0 / c) * signed_power(sphi, 2 - 2/n1)
+    # Normalize
+    norm = math.sqrt(nx**2 + ny**2 + nz**2)
+    return (nx / norm, ny / norm, nz / norm)
+
+def offset_point_along_normal(point, normal, t):
+    return tuple(point[i] + t*normal[i] for i in range(3))
+
+
+theta_case = math.radians(90)
+phi_vals = [i * math.pi/2 / num_partitions for i in range(1, num_partitions)]
+
+for phi_example in phi_vals:
+    # Compute inner and outer points on superellipsoid surface
+    pt_inner = superellipsoid_point_3d(phi_example, theta_case, a, b, c, n1, n2)
+    n_vec = superellipsoid_normal(phi_example, theta_case, a, b, c, n1, n2)
+    pt_inner_offset = offset_point_along_normal(pt_inner, n_vec, 1e-3)
+    # Create datum points and plane for partition
+    datum_inner = p.DatumPointByCoordinate(coords=pt_inner)
+    datum_outer = p.DatumPointByCoordinate(coords=pt_inner_offset)
+    datum_xy = p.DatumPointByCoordinate(coords=(pt_inner[2], pt_inner[1], pt_inner[0]))
+    plane_datum = p.DatumPlaneByThreePoints(
+        point1=p.datums[datum_inner.id],
+        point2=p.datums[datum_outer.id],
+        point3=p.datums[datum_xy.id]
+    )  
+    cell_to_partition = p.cells.getByBoundingBox(
+        xMin=-1e6, xMax=1e6,
+        yMin=-1e6, yMax=1e6,
+        zMin=-1e6, zMax=1e6
+    )  
+    p.PartitionCellByDatumPlane(
+        cells=cell_to_partition,
+        datumPlane=p.datums[plane_datum.id]
+    )
+# Final partition near the tip
+
+n = max(n1, n2)
+phi_tip_deg = 23.2 * math.exp(-1.225 * n)
+phi_tip = math.radians(phi_tip_deg)
+
+pt_inner = superellipsoid_point_3d(phi_tip, theta_case, a, b, c, n1, n2)
+n_vec = superellipsoid_normal(phi_tip, theta_case, a, b, c, n1, n2)
+pt_inner_offset = offset_point_along_normal(pt_inner, n_vec, 1e-3)
+# Create datum points and plane for partition
+datum_inner = p.DatumPointByCoordinate(coords=pt_inner)
+datum_outer = p.DatumPointByCoordinate(coords=pt_inner_offset)
+datum_xy = p.DatumPointByCoordinate(coords=(pt_inner[2], pt_inner[1], pt_inner[0]))
+plane_datum = p.DatumPlaneByThreePoints(
+    point1=p.datums[datum_inner.id],
+    point2=p.datums[datum_outer.id],
+    point3=p.datums[datum_xy.id]
+)  
+cell_to_partition = p.cells.getByBoundingBox(
+    xMin=-1e6, xMax=1e6,
+    yMin=-1e6, yMax=1e6,
+    zMin=-1e6, zMax=1e6
+)  
+p.PartitionCellByDatumPlane(
+    cells=cell_to_partition,
+    datumPlane=p.datums[plane_datum.id]
+)
