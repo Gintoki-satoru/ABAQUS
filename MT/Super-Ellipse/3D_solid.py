@@ -26,7 +26,7 @@ model.rootAssembly.regenerate()
 a, b, c = 150.0, 150.0, 150.0   # inner semi-axes
 total_length = c
 t = 2.5                         # total thickness
-n1, n2 = 10, 10                   # shape exponents
+n1, n2 = 12, 12                   # shape exponents
 num_points = 30                 # points per curve
 num_layers = 4                  # number of layers through thickness
 num_partitions = 4               # number of partitions
@@ -279,7 +279,7 @@ for phi_example in phi_vals:
 # Final partition near the tip
 
 n = max(n1, n2)
-phi_tip_deg = 23.2 * math.exp(-1.225 * n)
+phi_tip_deg = 57.7 * math.exp(-1.68 * n)
 phi_tip = math.radians(phi_tip_deg)
 
 pt_inner = superellipsoid_point_3d(phi_tip, theta_case, a, b, c, n1, n2)
@@ -326,9 +326,13 @@ def superellipsoid_normal(phi, theta, a, b, c, n1, n2):
 def offset_point_along_normal(point, normal, t):
     return tuple(point[i] + t*normal[i] for i in range(3))
 
-
 theta_case = math.radians(90)
+n = max(n1, n2)
+phi_tip_deg = 57.7 * math.exp(-1.68 * n)
+phi_tip = math.radians(phi_tip_deg)
 phi_vals = [i * math.pi/2 / num_partitions for i in range(1, num_partitions)]
+phi_vals.append(phi_tip)
+phi_vals = sorted(phi_vals)
 
 for phi_example in phi_vals:
     # Compute inner and outer points on superellipsoid surface
@@ -353,30 +357,43 @@ for phi_example in phi_vals:
         cells=cell_to_partition,
         datumPlane=p.datums[plane_datum.id]
     )
-# Final partition near the tip
 
-n = max(n1, n2)
-phi_tip_deg = 23.2 * math.exp(-1.225 * n)
-phi_tip = math.radians(phi_tip_deg)
+############ Step ############
+model.StaticStep(name='LoadingStep', previous='Initial', 
+    initialInc=1, minInc=1e-05, maxInc=1.0)
 
-pt_inner = superellipsoid_point_3d(phi_tip, theta_case, a, b, c, n1, n2)
-n_vec = superellipsoid_normal(phi_tip, theta_case, a, b, c, n1, n2)
-pt_inner_offset = offset_point_along_normal(pt_inner, n_vec, 1e-3)
-# Create datum points and plane for partition
-datum_inner = p.DatumPointByCoordinate(coords=pt_inner)
-datum_outer = p.DatumPointByCoordinate(coords=pt_inner_offset)
-datum_xy = p.DatumPointByCoordinate(coords=(pt_inner[2], pt_inner[1], pt_inner[0]))
-plane_datum = p.DatumPlaneByThreePoints(
-    point1=p.datums[datum_inner.id],
-    point2=p.datums[datum_outer.id],
-    point3=p.datums[datum_xy.id]
-)  
-cell_to_partition = p.cells.getByBoundingBox(
-    xMin=-1e6, xMax=1e6,
-    yMin=-1e6, yMax=1e6,
-    zMin=-1e6, zMax=1e6
-)  
-p.PartitionCellByDatumPlane(
-    cells=cell_to_partition,
-    datumPlane=p.datums[plane_datum.id]
-)
+############ Create Surface ############
+
+theta_vals = []
+
+th_o = math.radians(90)
+x = (phi_vals[0] - 0.0) / 2.0
+theta_vals.append(th_o - (phi_vals[0] - x))
+
+for i in range(1, len(phi_vals)):
+    x = (phi_vals[i] - phi_vals[i-1]) / 2.0
+    theta_vals.append(th_o - (phi_vals[i] - x))
+
+x = (th_o - phi_vals[-1]) / 2.0
+theta_vals.append(th_o - (th_o - x))
+
+# --- Assembly and faces
+a1 = mdb.models['SuperEllipse'].rootAssembly
+s1 = a1.instances['SuperEllipsoid-1'].faces
+search_tol = 0.1
+faces_combined = []
+
+for i, theta_i in enumerate(theta_vals):
+    phi_i = phi_vals[0]
+    pt = superellipsoid_point_3d(phi_i, theta_i, a, b, c, n1, n2)
+    found = s1.getClosest(coordinates=(tuple(pt),), searchTolerance=search_tol)
+    if found:
+        face_pt = found[0][1]
+        seq_face = s1.findAt((face_pt,),)
+        if seq_face:
+            a1.Surface(side1Faces=seq_face, name='Surf_%d' % (i+1))
+            faces_combined.append(seq_face)
+
+# Create a single combined surface
+if faces_combined:
+    a1.Surface(side1Faces=faces_combined, name='Surf_Load')
