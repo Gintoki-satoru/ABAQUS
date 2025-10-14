@@ -26,7 +26,7 @@ model.rootAssembly.regenerate()
 a, b, c = 150.0, 150.0, 150.0   # inner semi-axes
 total_length = c
 t = 2.5                         # total thickness
-n1, n2 = 12, 12                   # shape exponents
+n1, n2 = 2, 2                   # shape exponents
 num_points = 30                 # points per curve
 num_layers = 4                  # number of layers through thickness
 num_partitions = 4               # number of partitions
@@ -326,9 +326,9 @@ def superellipsoid_normal(phi, theta, a, b, c, n1, n2):
 def offset_point_along_normal(point, normal, t):
     return tuple(point[i] + t*normal[i] for i in range(3))
 
-theta_case = math.radians(90)
+theta_case = math.radians(0)
 n = max(n1, n2)
-phi_tip_deg = 57.7 * math.exp(-1.68 * n)
+phi_tip_deg = 87.605 * math.exp(0.0022474 * n)
 phi_tip = math.radians(phi_tip_deg)
 phi_vals = [i * math.pi/2 / num_partitions for i in range(1, num_partitions)]
 phi_vals.append(phi_tip)
@@ -342,7 +342,7 @@ for phi_example in phi_vals:
     # Create datum points and plane for partition
     datum_inner = p.DatumPointByCoordinate(coords=pt_inner)
     datum_outer = p.DatumPointByCoordinate(coords=pt_inner_offset)
-    datum_xy = p.DatumPointByCoordinate(coords=(pt_inner[2], pt_inner[1], pt_inner[0]))
+    datum_xy = p.DatumPointByCoordinate(coords=(pt_inner[1], pt_inner[0], pt_inner[2]))
     plane_datum = p.DatumPlaneByThreePoints(
         point1=p.datums[datum_inner.id],
         point2=p.datums[datum_outer.id],
@@ -391,9 +391,25 @@ for i, theta_i in enumerate(theta_vals):
         face_pt = found[0][1]
         seq_face = s1.findAt((face_pt,),)
         if seq_face:
-            a1.Surface(side1Faces=seq_face, name='Surf_%d' % (i+1))
+            # a1.Surface(side1Faces=seq_face, name='Surf_%d' % (i+1))
             faces_combined.append(seq_face)
 
 # Create a single combined surface
 if faces_combined:
     a1.Surface(side1Faces=faces_combined, name='Surf_Load')
+
+
+"""phi_i = math.radians(5)
+theta_i = math.radians(45)
+pt = superellipsoid_point_3d(phi_i, theta_i, a, b, c, n1, n2)
+a1.DatumPointByCoordinate(coords=pt)
+
+phi_i = math.radians(45)
+theta_i = math.radians(45)
+pt = superellipsoid_point_3d(phi_i, theta_i, a, b, c, n1, n2)
+a1.DatumPointByCoordinate(coords=pt)
+
+phi_i = math.radians(85)
+theta_i = math.radians(45)
+pt = superellipsoid_point_3d(phi_i, theta_i, a, b, c, n1, n2)
+a1.DatumPointByCoordinate(coords=pt)"""
