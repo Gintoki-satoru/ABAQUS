@@ -23,10 +23,10 @@ model.rootAssembly.clearGeometryCache()
 model.rootAssembly.regenerate()
 
 ################ Parameters #####################
-a, b, c = 150.0, 150.0, 150.0   # inner semi-axes
+a, b, c = 1500.0, 1500.0, 1500.0   # inner semi-axes
 total_length = c
-t = 2.5                         # total thickness
-n1, n2 = 20, 20                   # shape exponents
+t = 50                         # total thickness
+n1, n2 = 5, 10                   # shape exponents
 num_points = 30                 # points per curve
 num_layers = 1                  # number of layers through thickness
 num_partitions = 6              # number of partitions
@@ -69,20 +69,11 @@ def create_layer_part(model, layer_index, num_theta_sections):
     # Angular values
     phi_vals = [math.radians(i * 90 / num_points) for i in range(num_points + 1)]
     theta_vals = [math.radians(i * 90 / num_points) for i in range(num_points + 1)]
-    if n2 > 4 and num_points > 2:
-        # Replace second and second-to-last values
-        theta_vals[1] = math.radians(0.1)
-        theta_vals[-2] = math.radians(89.1) 
-    # --- Case 1 (phi=0°) ---
-    inner_case1 = [superellipsoid_point_3d(0.0, th, a_i, b_i, c_i, n1, n2) for th in theta_vals]
-    outer_case1 = [superellipsoid_point_3d(0.0, th, a_o, b_o, c_o, n1, n2) for th in theta_vals]
     # --- Determine θ angles for cross-sections ---
     if num_theta_sections == 2:
         theta_sections = [0, 90]
     elif num_theta_sections >= 3:
-        # Start with required angles
         theta_sections = [0, 45, 90]
-        # Add extra evenly spaced angles if more than 3 sections
         if num_theta_sections > 3:
             step = 90.0 / (num_theta_sections - 1)
             extra_angles = [
@@ -91,12 +82,25 @@ def create_layer_part(model, layer_index, num_theta_sections):
                 if abs(i * step - 45) > 1e-3
             ]
             theta_sections = sorted(set(theta_sections + extra_angles))
-        # Special adjustment if n2 > 4 and num_theta_sections > 3
-        if n2 > 4 and num_theta_sections > 3:
-            theta_sections[1] = 0.1                     # second angle
-            theta_sections[-2] = 89.1                   # second-to-last angle
+        if n2 >= 12 and num_theta_sections > 3:
+            theta_sections[1] = 0.01
+            theta_sections[2] = 1
+            theta_sections[-2] = 90 - 0.01
+            theta_sections[-3] = 90 - 1
+        elif n2 >= 6 and num_theta_sections > 3:
+            theta_sections[1] = 1
+            theta_sections[-2] = 90 - 1
+        elif n2 > 4 and num_theta_sections > 3:
+            theta_sections[1] = 5
+            theta_sections[-2] = 90 - 5
     else:
         raise ValueError("num_theta_sections must be >= 2")
+    theta_vals_deg = [math.degrees(t) for t in theta_vals]
+    merged_angles = sorted(set(theta_vals_deg + theta_sections))
+    theta_vals = [math.radians(r) for r in merged_angles]
+    # --- Case 1 (phi=0°) ---
+    inner_case1 = [superellipsoid_point_3d(0.0, th, a_i, b_i, c_i, n1, n2) for th in theta_vals]
+    outer_case1 = [superellipsoid_point_3d(0.0, th, a_o, b_o, c_o, n1, n2) for th in theta_vals]
     part_name = "Layer_" + str(layer_index + 1)
     p = model.Part(name=part_name, dimensionality=THREE_D, type=DEFORMABLE_BODY)
     theta_data = []
@@ -203,10 +207,6 @@ model = mdb.models['SuperEllipse']
 for i in range(num_layers):
     create_layer_part(model, i, num_theta_sections)
 
-"""p.SolidLoft(loftsections=((e1.findAt(coordinates=(inner_case1[mid_idx])), e1.findAt(coordinates=(inner_case2[mid_idx])), e1.findAt(coordinates=( inner_case3[mid_idx]))), 
-                          (e1.findAt(coordinates=(outer_case1[mid_idx])), e1.findAt(coordinates=(outer_case2[mid_idx])), e1.findAt( coordinates=(outer_case3[mid_idx])))), 
-                          startCondition=NONE, endCondition=NONE)"""
-
 ############ Create SuperEllipsoid by merging layers ############
 
 def assemble_and_merge_layers(num_layers):
@@ -219,14 +219,17 @@ def assemble_and_merge_layers(num_layers):
         part = model.parts[part_name]
         assembly.Instance(name=inst_name, part=part, dependent=ON)
         instance_names.append(inst_name)
-    instances_to_merge = tuple(assembly.instances[name] for name in instance_names)
-    assembly.InstanceFromBooleanMerge(
-        name='SuperEllipsoid',
-        instances=instances_to_merge,
-        keepIntersections=ON,
-        originalInstances=DELETE,
-        domain=GEOMETRY
-    )
+    if num_layers > 1:
+        instances_to_merge = tuple(assembly.instances[name] for name in instance_names)
+        assembly.InstanceFromBooleanMerge(
+            name='SuperEllipsoid',
+            instances=instances_to_merge,
+            keepIntersections=ON,
+            originalInstances=DELETE,
+            domain=GEOMETRY
+        )
+    else:
+        mdb.models['SuperEllipse'].parts.changeKey(fromName='Layer_1',toName='SuperEllipsoid')
 
 assemble_and_merge_layers(num_layers)
 

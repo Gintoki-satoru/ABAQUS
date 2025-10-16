@@ -17,7 +17,7 @@ session.journalOptions.setValues(replayGeometry=COORDINATE, recoverGeometry=COOR
 
 
 ################ Parameters #####################
-a, b, c = 150.0, 100.0, 150.0   # semi-axes
+a, b, c = 150.0, 150.0, 150.0   # semi-axes
 t = 2.5                         # thickness
 n1, n2 = 2, 2           # shape exponents
 num_points = 20                 # resolution along curve
