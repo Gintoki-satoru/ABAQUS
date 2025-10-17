@@ -220,7 +220,9 @@ mdb.models['SuperEllipse'].parts['SuperEllipsoid'].setValues(
     geometryRefinement=FINE)
 
 ############ Partitioning ############
+#### Strat - 1 ####
 '''
+n_long = 4  # number of longitudinal partitions
 p = mdb.models['SuperEllipse'].parts['SuperEllipsoid']
 csys = p.DatumCsysByThreePoints(
     name='Datum csys-1',
@@ -233,6 +235,7 @@ csys_id = csys.id
 
 dp = p.DatumPlaneByPrincipalPlane(principalPlane=XZPLANE, offset=0.0)
 datumPlane0 = p.datums[dp.id]
+
 angle_increment = 90.0 / n_long
 d = p.datums
 for i in range(1, n_long):
@@ -259,86 +262,43 @@ for i in range(1, n_long):
         yMin=-1e6, yMax=1e6,
         zMin=-1e6, zMax=1e6
     )
-    p.PartitionCellByDatumPlane(datumPlane=dp_rot_obj, cells=current_cells)
-'''
+    p.PartitionCellByDatumPlane(datumPlane=dp_rot_obj, cells=current_cells)'''
 
 #### Strat - 2 ####
-
-def surface_normal(phi, theta, a, b, c, n1, n2, h=1e-6):
-    """Approximate normal via finite differences."""
-    p0 = superellipsoid_point_3d(phi, theta, a, b, c, n1, n2)
-    p_phi = superellipsoid_point_3d(phi + h, theta, a, b, c, n1, n2)
-    p_theta = superellipsoid_point_3d(phi, theta + h, a, b, c, n1, n2)
-    t_phi = [p_phi[i] - p0[i] for i in range(3)]
-    t_theta = [p_theta[i] - p0[i] for i in range(3)]
-    nx = t_phi[1]*t_theta[2] - t_phi[2]*t_theta[1]
-    ny = t_phi[2]*t_theta[0] - t_phi[0]*t_theta[2]
-    nz = t_phi[0]*t_theta[1] - t_phi[1]*t_theta[0]
-    norm = math.sqrt(nx**2 + ny**2 + nz**2)
-    return (nx/norm, ny/norm, nz/norm)
-
-def offset_point_along_normal(point, normal, t):
-    return tuple(point[i] + t*normal[i] for i in range(3))
-
-'''# Get the part and faces
-f = p.faces
-num_partitions = 4
-theta_case = math.radians(90)
-phi_vals = [i * math.pi/2 / num_partitions for i in range(1, num_partitions)]
-
-for phi_example in phi_vals:
-    pt_inner = superellipsoid_point_3d(phi_example, theta_case, a, b, c, n1, n2)
-    pt_outer = superellipsoid_point_3d(phi_example, theta_case, a_out, b_out, c_out, n1, n2)
-    n_vec = surface_normal(phi_example, theta_case, a, b, c, n1, n2)
-    # Slight adjustment along normal (reduces Abaqus tolerance errors)
-    pt_inner_adj = offset_point_along_normal(pt_inner, n_vec, -1e-4)
-    pt_outer_adj = offset_point_along_normal(pt_outer, n_vec, +1e-4)
-    datum_inner = p.DatumPointByCoordinate(coords=pt_inner_adj)
-    datum_outer = p.DatumPointByCoordinate(coords=pt_outer_adj)
-    # Attempt with increasing search tolerance
-    closest_face_result = f.getClosest(coordinates=(pt_inner_adj,), searchTolerance=1e-3)
-    if not closest_face_result:
-        closest_face_result = f.getClosest(coordinates=(pt_inner_adj,), searchTolerance=1e-2)
-    if closest_face_result:
-        closest_face = closest_face_result[0][0]
-        p.PartitionFaceByShortestPath(
-            faces=closest_face,
-            point1=p.datums[datum_inner.id],
-            point2=p.datums[datum_outer.id]
-        )
-    else:
-        print("No nearby face found at:", pt_inner_adj)
-
-phi_case = 0.0
-num_partitions = 4
-theta_vals = [i * math.pi/2 / num_partitions for i in range(1, num_partitions + 1)]
-for theta_example in theta_vals:   
-    # 1️⃣ Compute points on the surface
-    pt_inner = superellipsoid_point_3d(phi_case, theta_example, a, b, c, n1, n2)
-    pt_outer = superellipsoid_point_3d(phi_case, theta_example, a_out, b_out, c_out, n1, n2)
-    # 2️⃣ Compute surface normal
-    n_vec = surface_normal(phi_case, theta_example, a, b, c, n1, n2)
-    # 3️⃣ Adjust for numerical tolerance
-    pt_inner_adj = offset_point_along_normal(pt_inner, n_vec, -1e-4)
-    pt_outer_adj = offset_point_along_normal(pt_outer, n_vec, +1e-4)
-    # 4️⃣ Create datum points
-    datum_inner = p.DatumPointByCoordinate(coords=pt_inner_adj)
-    datum_outer = p.DatumPointByCoordinate(coords=pt_outer_adj)
-    # 5️⃣ Find closest face (with tolerance)
-    closest_face_result = f.getClosest(coordinates=(pt_inner_adj,), searchTolerance=1e-3)
-    if not closest_face_result:
-        closest_face_result = f.getClosest(coordinates=(pt_inner_adj,), searchTolerance=1e-2)
-    # 6️⃣ Partition along the line between inner & outer
-    if closest_face_result:
-        closest_face = closest_face_result[0][0]
-        p.PartitionFaceByShortestPath(
-            faces=closest_face,
-            point1=p.datums[datum_inner.id],
-            point2=p.datums[datum_outer.id]
-        )
-    else:
-        print("No nearby face found at:", pt_inner_adj)
 '''
+p = mdb.models['SuperEllipse'].parts['SuperEllipsoid']
+dp_xy = p.DatumPlaneByPrincipalPlane(principalPlane=XYPLANE, offset=0.0)
+datumPlane0 = p.datums[dp_xy.id]
+
+n_partitions = 4
+total_length = c
+dz = total_length / n_partitions
+
+for i in range(1, n_partitions):
+    offset = i * dz
+    dp_offset = p.DatumPlaneByOffset(plane=datumPlane0, flip=SIDE1, offset=offset)
+    dp_offset_obj = p.datums[dp_offset.id]
+    current_cells = p.cells.getByBoundingBox(
+        xMin=-1e6, xMax=1e6,
+        yMin=-1e6, yMax=1e6,
+        zMin=-1e6, zMax=1e6
+    )
+    p.PartitionCellByDatumPlane(datumPlane=dp_offset_obj, cells=current_cells)
+
+dp_yz = p.DatumPlaneByPrincipalPlane(principalPlane=YZPLANE, offset=0.0)
+datumPlane1 = p.datums[dp_yz.id]
+
+for i in range(1, n_partitions):
+    offset = i * dz
+    dp_offset = p.DatumPlaneByOffset(plane=datumPlane1, flip=SIDE1, offset=offset)
+    dp_offset_obj = p.datums[dp_offset.id]
+    current_cells = p.cells.getByBoundingBox(
+        xMin=-1e6, xMax=1e6,
+        yMin=-1e6, yMax=1e6,
+        zMin=-1e6, zMax=1e6
+    )
+    p.PartitionCellByDatumPlane(datumPlane=dp_offset_obj, cells=current_cells)'''
+
 #### Strat - 3 ####
 '''
 def surface_normal(phi, theta, a, b, c, n1, n2, h=1e-6):
@@ -436,13 +396,13 @@ def superellipsoid_normal(phi, theta, a, b, c, n1, n2):
 def offset_point_along_normal(point, normal, t):
     return tuple(point[i] + t*normal[i] for i in range(3))
 
-theta_case = math.radians(90)
+theta_case = math.radians(0)
 n = max(n1, n2)
-phi_tip_deg = 57.7 * math.exp(-1.68 * n)
-phi_tip = math.radians(phi_tip_deg)
+# phi_tip_deg = 87.605 * math.exp(0.0022474 * n)
+# phi_tip = math.radians(phi_tip_deg)
 phi_vals = [i * math.pi/2 / num_partitions for i in range(1, num_partitions)]
-phi_vals.append(phi_tip)
-phi_vals = sorted(phi_vals)
+# phi_vals.append(phi_tip)
+# phi_vals = sorted(phi_vals)
 
 for phi_example in phi_vals:
     # Compute inner and outer points on superellipsoid surface
@@ -452,7 +412,7 @@ for phi_example in phi_vals:
     # Create datum points and plane for partition
     datum_inner = p.DatumPointByCoordinate(coords=pt_inner)
     datum_outer = p.DatumPointByCoordinate(coords=pt_inner_offset)
-    datum_xy = p.DatumPointByCoordinate(coords=(pt_inner[2], pt_inner[1], pt_inner[0]))
+    datum_xy = p.DatumPointByCoordinate(coords=(pt_inner[1], pt_inner[0], pt_inner[2]))
     plane_datum = p.DatumPlaneByThreePoints(
         point1=p.datums[datum_inner.id],
         point2=p.datums[datum_outer.id],
@@ -467,5 +427,4 @@ for phi_example in phi_vals:
         cells=cell_to_partition,
         datumPlane=p.datums[plane_datum.id]
     )
-
 

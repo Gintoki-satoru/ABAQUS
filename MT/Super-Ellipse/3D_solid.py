@@ -23,16 +23,15 @@ model.rootAssembly.clearGeometryCache()
 model.rootAssembly.regenerate()
 
 ################ Parameters #####################
-a, b, c = 1500.0, 1500.0, 1500.0   # inner semi-axes
+a, b, c = 150.0, 150.0, 150.0   # inner semi-axes
 total_length = c
-t = 50                         # total thickness
-n1, n2 = 5, 10                   # shape exponents
+thick = 10.0                         # total thickness
+n1, n2 = 0.1, 2                   # shape exponents
 num_points = 30                 # points per curve
-num_layers = 1                  # number of layers through thickness
-num_partitions = 6              # number of partitions
-num_theta_sections = 6          # number of θ sections(min 2): For even number, the number of partitions created will be (num_theta_sections + 1)
+num_layers = 6                  # number of layers through thickness
+num_theta_sections = 3          # number of θ sections(min 2): For even number, the number of partitions created will be (num_theta_sections + 1)
 
-a_out, b_out, c_out = a + t, b + t, c + t  # outer semi-axes
+a_out, b_out, c_out = a + thick, b + thick, c + thick  # outer semi-axes
 
 ################ Helper Functions #####################
 def signed_power(base, exp):
@@ -43,9 +42,9 @@ def superellipsoid_point_3d(phi, theta, a, b, c, n1, n2):
     sin_phi = math.sin(phi)
     cos_theta = math.cos(theta)
     sin_theta = math.sin(theta)
-    x = a * signed_power(cos_phi, 2.0/n1) * signed_power(cos_theta, 2.0/n2)
-    y = b * signed_power(cos_phi, 2.0/n1) * signed_power(sin_theta, 2.0/n2)
-    z = c * signed_power(sin_phi, 2.0/n1)
+    x = a * signed_power(cos_phi, n1) * signed_power(cos_theta, n2)
+    y = b * signed_power(cos_phi, n1) * signed_power(sin_theta, n2)
+    z = c * signed_power(sin_phi, n1)
     return x, y, z
 
 def create_datums(p, point_list):
@@ -82,17 +81,20 @@ def create_layer_part(model, layer_index, num_theta_sections):
                 if abs(i * step - 45) > 1e-3
             ]
             theta_sections = sorted(set(theta_sections + extra_angles))
-        if n2 >= 12 and num_theta_sections > 3:
-            theta_sections[1] = 0.01
-            theta_sections[2] = 1
-            theta_sections[-2] = 90 - 0.01
-            theta_sections[-3] = 90 - 1
-        elif n2 >= 6 and num_theta_sections > 3:
-            theta_sections[1] = 1
-            theta_sections[-2] = 90 - 1
-        elif n2 > 4 and num_theta_sections > 3:
-            theta_sections[1] = 5
-            theta_sections[-2] = 90 - 5
+        if num_theta_sections > 3:
+            if n2 <= 1.0/6:
+                theta_sections[1] = 0.01
+                theta_sections[2] = 1
+                theta_sections[-3] = 90 - 1
+                theta_sections[-2] = 90 - 0.01
+            elif n2 <= 1.0/3:
+                theta_sections[1] = 1
+                theta_sections[-2] = 90 - 1
+            elif n2 <= 1.0/2:
+                theta_sections[1] = 5
+                theta_sections[-2] = 90 - 5
+            else:
+                print("No modification made to theta_sections")
     else:
         raise ValueError("num_theta_sections must be >= 2")
     theta_vals_deg = [math.degrees(t) for t in theta_vals]
@@ -143,7 +145,7 @@ def create_layer_part(model, layer_index, num_theta_sections):
     create_wire_splines(p, outer_case1)
     # --- Remove extra wires ---
     center = (0.0, 0.0, c_o)
-    radius = 1
+    radius = 0.5
     edges_near_top = p.edges.getByBoundingSphere(center=center, radius=radius)
     center_bottom = (0.0, 0.0, c_i)
     edges_near_bottom = p.edges.getByBoundingSphere(center=center_bottom, radius=radius)
@@ -165,12 +167,11 @@ def create_layer_part(model, layer_index, num_theta_sections):
             e1.findAt(coordinates=section["dp_mid_start_coord"]),
         )
         loftsections.append(pts)
-    # Generate evenly distributed theta midpoints between each theta section
     theta_mid = [
         (theta_sections[i] + theta_sections[i + 1]) / 2.0
         for i in range(len(theta_sections) - 1)
     ]
-    search_tol = 0.1  # or your desired tolerance
+    search_tol = 0.1  # desired tolerance
     inner_path_edges = []
     outer_path_edges = []
     for t_deg in theta_mid:
@@ -230,6 +231,7 @@ def assemble_and_merge_layers(num_layers):
         )
     else:
         mdb.models['SuperEllipse'].parts.changeKey(fromName='Layer_1',toName='SuperEllipsoid')
+        mdb.models['SuperEllipse'].rootAssembly.features.changeKey(fromName='Layer_1-1', toName='SuperEllipsoid-1')
 
 assemble_and_merge_layers(num_layers)
 
@@ -256,175 +258,15 @@ mdb.models['SuperEllipse'].parts['SuperEllipsoid'].setValues(
 
 ############ Partitioning ############
 
-#### Strat - 1 ####
-'''
-n_long = 4  # number of longitudinal partitions
-p = mdb.models['SuperEllipse'].parts['SuperEllipsoid']
-csys = p.DatumCsysByThreePoints(
-    name='Datum csys-1',
-    coordSysType=CARTESIAN,
-    origin=(0.0, 0.0, 0.0),
-    point1=(1.0, 0.0, 1.0),
-    point2=(0.0, 1.0, 0.0)
-)
-csys_id = csys.id
-
-dp = p.DatumPlaneByPrincipalPlane(principalPlane=XZPLANE, offset=0.0)
-datumPlane0 = p.datums[dp.id]
-
-angle_increment = 90.0 / n_long
-d = p.datums
-for i in range(1, n_long):
-    angle = i * angle_increment
-    dp_rot = p.DatumPlaneByRotation(plane=datumPlane0, axis=d[csys_id].axis3, angle=angle)
-    dp_rot_obj = p.datums[dp_rot.id]
-    current_cells = p.cells.getByBoundingBox(
-        xMin=-1e6, xMax=1e6,
-        yMin=-1e6, yMax=1e6,
-        zMin=-1e6, zMax=1e6
-    )
-    p.PartitionCellByDatumPlane(datumPlane=dp_rot_obj, cells=current_cells)
-
-dp = p.DatumPlaneByPrincipalPlane(principalPlane=YZPLANE, offset=0.0)
-datumPlane0 = p.datums[dp.id]
-angle_increment = 90.0 / n_long
-d = p.datums
-for i in range(1, n_long):
-    angle = i * angle_increment
-    dp_rot = p.DatumPlaneByRotation(plane=datumPlane0, axis=d[csys_id].axis2, angle=angle)
-    dp_rot_obj = p.datums[dp_rot.id]
-    current_cells = p.cells.getByBoundingBox(
-        xMin=-1e6, xMax=1e6,
-        yMin=-1e6, yMax=1e6,
-        zMin=-1e6, zMax=1e6
-    )
-    p.PartitionCellByDatumPlane(datumPlane=dp_rot_obj, cells=current_cells)'''
-
-#### Strat - 2 ####
-'''
-p = mdb.models['SuperEllipse'].parts['SuperEllipsoid']
-dp_xy = p.DatumPlaneByPrincipalPlane(principalPlane=XYPLANE, offset=0.0)
-datumPlane0 = p.datums[dp_xy.id]
-
-n_partitions = 4
-total_length = c
-dz = total_length / n_partitions
-
-for i in range(1, n_partitions):
-    offset = i * dz
-    dp_offset = p.DatumPlaneByOffset(plane=datumPlane0, flip=SIDE1, offset=offset)
-    dp_offset_obj = p.datums[dp_offset.id]
-    current_cells = p.cells.getByBoundingBox(
-        xMin=-1e6, xMax=1e6,
-        yMin=-1e6, yMax=1e6,
-        zMin=-1e6, zMax=1e6
-    )
-    p.PartitionCellByDatumPlane(datumPlane=dp_offset_obj, cells=current_cells)
-
-dp_yz = p.DatumPlaneByPrincipalPlane(principalPlane=YZPLANE, offset=0.0)
-datumPlane1 = p.datums[dp_yz.id]
-
-for i in range(1, n_partitions):
-    offset = i * dz
-    dp_offset = p.DatumPlaneByOffset(plane=datumPlane1, flip=SIDE1, offset=offset)
-    dp_offset_obj = p.datums[dp_offset.id]
-    current_cells = p.cells.getByBoundingBox(
-        xMin=-1e6, xMax=1e6,
-        yMin=-1e6, yMax=1e6,
-        zMin=-1e6, zMax=1e6
-    )
-    p.PartitionCellByDatumPlane(datumPlane=dp_offset_obj, cells=current_cells)'''
-
-#### Strat - 3 ####
-'''
-def surface_normal(phi, theta, a, b, c, n1, n2, h=1e-6):
-    """Approximate normal via finite differences."""
-    p0 = superellipsoid_point_3d(phi, theta, a, b, c, n1, n2)
-    p_phi = superellipsoid_point_3d(phi + h, theta, a, b, c, n1, n2)
-    p_theta = superellipsoid_point_3d(phi, theta + h, a, b, c, n1, n2)
-    t_phi = [p_phi[i] - p0[i] for i in range(3)]
-    t_theta = [p_theta[i] - p0[i] for i in range(3)]
-    nx = t_phi[1]*t_theta[2] - t_phi[2]*t_theta[1]
-    ny = t_phi[2]*t_theta[0] - t_phi[0]*t_theta[2]
-    nz = t_phi[0]*t_theta[1] - t_phi[1]*t_theta[0]
-    norm = math.sqrt(nx**2 + ny**2 + nz**2)
-    return (nx/norm, ny/norm, nz/norm)
-
-def offset_point_along_normal(point, normal, t):
-    return tuple(point[i] + t*normal[i] for i in range(3))
-
-theta_case = math.radians(90)
-phi_vals = [i * math.pi/2 / num_partitions for i in range(1, num_partitions)]
-
-for phi_example in phi_vals:
-    # Compute inner and outer points
-    pt_inner = superellipsoid_point_3d(phi_example, theta_case, a, b, c, n1, n2)
-    pt_outer = superellipsoid_point_3d(phi_example, theta_case, a_out, b_out, c_out, n1, n2)
-    # Compute normal and adjust points slightly
-    n_vec = surface_normal(phi_example, theta_case, a, b, c, n1, n2)
-    pt_inner_adj = offset_point_along_normal(pt_inner, n_vec, -1e-4)
-    pt_outer_adj = offset_point_along_normal(pt_outer, n_vec, +1e-4)
-    datum_inner = p.DatumPointByCoordinate(coords=pt_inner_adj)
-    datum_outer = p.DatumPointByCoordinate(coords=pt_outer_adj)
-    datum_xy = p.DatumPointByCoordinate(coords=(pt_inner_adj[2], pt_inner_adj[1], pt_inner_adj[0]))
-    plane_datum = p.DatumPlaneByThreePoints(
-        point1=p.datums[datum_inner.id],
-        point2=p.datums[datum_outer.id],
-        point3=p.datums[datum_xy.id]
-    )
-    cell_to_partition = p.cells.getByBoundingBox(
-        xMin=-1e6, xMax=1e6,
-        yMin=-1e6, yMax=1e6,
-        zMin=-1e6, zMax=1e6
-    )
-    p.PartitionCellByDatumPlane(
-        cells=cell_to_partition,
-        datumPlane=p.datums[plane_datum.id]
-    )
-
-# Final partition near the tip
-
-n = max(n1, n2)
-phi_tip_deg = 57.7 * math.exp(-1.68 * n)
-phi_tip = math.radians(phi_tip_deg)
-
-pt_inner = superellipsoid_point_3d(phi_tip, theta_case, a, b, c, n1, n2)
-pt_outer = superellipsoid_point_3d(phi_tip, theta_case, a_out, b_out, c_out, n1, n2)
-
-n_vec = surface_normal(phi_tip, theta_case, a, b, c, n1, n2)
-pt_inner_adj = offset_point_along_normal(pt_inner, n_vec, -1e-4)
-pt_outer_adj = offset_point_along_normal(pt_outer, n_vec, +1e-4)
-
-datum_inner = p.DatumPointByCoordinate(coords=pt_inner_adj)
-datum_outer = p.DatumPointByCoordinate(coords=pt_outer_adj)
-datum_xy = p.DatumPointByCoordinate(coords=(pt_inner_adj[2], pt_inner_adj[1], pt_inner_adj[0]))
-
-plane_datum = p.DatumPlaneByThreePoints(
-    point1=p.datums[datum_inner.id],
-    point2=p.datums[datum_outer.id],
-    point3=p.datums[datum_xy.id]
-)
-
-cell_to_partition = p.cells.getByBoundingBox(
-    xMin=-1e6, xMax=1e6,
-    yMin=-1e6, yMax=1e6,
-    zMin=-1e6, zMax=1e6
-)
-
-p.PartitionCellByDatumPlane(
-    cells=cell_to_partition,
-    datumPlane=p.datums[plane_datum.id]
-)
-'''
 #### Strat - 4 ####
 def superellipsoid_normal(phi, theta, a, b, c, n1, n2):
     """Analytical unit normal vector on superellipsoid surface."""
     cphi, sphi = math.cos(phi), math.sin(phi)
     ctheta, stheta = math.cos(theta), math.sin(theta)
     # Use your signed_power(base, exp)
-    nx = (1.0 / a) * signed_power(cphi, 2 - 2/n1) * signed_power(ctheta, 2 - 2/n2)
-    ny = (1.0 / b) * signed_power(cphi, 2 - 2/n1) * signed_power(stheta, 2 - 2/n2)
-    nz = (1.0 / c) * signed_power(sphi, 2 - 2/n1)
+    nx = (1.0 / a) * signed_power(cphi, 2 - n1) * signed_power(ctheta, 2 - n2)
+    ny = (1.0 / b) * signed_power(cphi, 2 - n1) * signed_power(stheta, 2 - n2)
+    nz = (1.0 / c) * signed_power(sphi, 2 - n1)
     # Normalize
     norm = math.sqrt(nx**2 + ny**2 + nz**2)
     return (nx / norm, ny / norm, nz / norm)
@@ -433,12 +275,13 @@ def offset_point_along_normal(point, normal, t):
     return tuple(point[i] + t*normal[i] for i in range(3))
 
 theta_case = math.radians(0)
-n = max(n1, n2)
-phi_tip_deg = 87.605 * math.exp(0.0022474 * n)
-phi_tip = math.radians(phi_tip_deg)
-phi_vals = [i * math.pi/2 / num_partitions for i in range(1, num_partitions)]
+phi_vals = [math.radians(15), math.radians(75)]
+# n = max(n1, n2)
+# phi_tip_deg = 87.605 * math.exp(0.0022474 * n)
+# phi_tip = math.radians(phi_tip_deg)
+#phi_vals = [i * math.pi/2 / num_partitions for i in range(1, num_partitions)]
 # phi_vals.append(phi_tip)
-phi_vals = sorted(phi_vals)
+# phi_vals = sorted(phi_vals)
 
 for phi_example in phi_vals:
     # Compute inner and outer points on superellipsoid surface
@@ -469,15 +312,21 @@ model.StaticStep(name='LoadingStep', previous='Initial',
     initialInc=1, minInc=1e-05, maxInc=1.0)
 
 ############ Create Surface ############
-
+### Strat - 1 ###
 phi_surf = []
 
 for i in range(0, len(phi_vals)):
-    phi_surf.append(phi_vals[i] - math.radians(0.5))
+    phi_surf.append(phi_vals[i] - math.radians(10))
 
 ph_o = math.radians(90)
-x = (ph_o - phi_vals[-1])/2
+if n2 >= 1.0:
+    x = math.radians(1)
+else:
+    x = math.radians(0.01)
+
 phi_surf.append(ph_o - x)
+phi_surf_deg = [math.degrees(t) for t in phi_surf]
+print("Partition angles (degrees): ", phi_surf_deg)
 
 a1 = mdb.models['SuperEllipse'].rootAssembly
 s1 = a1.instances['SuperEllipsoid-1'].faces
@@ -493,24 +342,53 @@ for i, phi_i in enumerate(phi_surf):
         face_pt = found[0][1]
         seq_face = s1.findAt((face_pt,),)
         if seq_face:
-            # a1.Surface(side1Faces=seq_face, name='Surf_%d' % (i+1))
             faces_combined.append(seq_face)
 
 if faces_combined:
     a1.Surface(side1Faces=faces_combined, name='Surf_Load')
 
+########### Create Set ############
 
-"""phi_i = math.radians(5)
-theta_i = math.radians(45)
-pt = superellipsoid_point_3d(phi_i, theta_i, a, b, c, n1, n2)
-a1.DatumPointByCoordinate(coords=pt)
+layer_thickness = float(thick / num_layers)
+for theta_val, set_suffix in zip([0.0, math.radians(90)], ['x', 'y']):
+    layer_face_points = []
+    for layer_index in range(1, num_layers + 1):
+        frac = float((layer_thickness / 2))
+        a_i = a + frac + (layer_index - 1) * layer_thickness
+        b_i = b + frac + (layer_index - 1) * layer_thickness
+        c_i = c + frac + (layer_index - 1) * layer_thickness
+        phi_set = [
+            phi_vals[0] / 2,
+            (phi_vals[0] + phi_vals[1]) / 2 + phi_vals[0],
+            math.radians(90) - phi_vals[0] / 2
+        ]
+        for phi_mid in phi_set:
+            pt = superellipsoid_point_3d(phi_mid, theta_val, a_i, b_i, c_i, n1, n2)
+            layer_face_points.append(pt)
+    layer_face_objs = []
+    for pt in layer_face_points:
+        found = s1.findAt((pt,))
+        if found:
+            layer_face_objs.append(found)
+    if layer_face_objs:
+        a1.Set(faces=layer_face_objs, name='Set-Layer-' + set_suffix)
 
-phi_i = math.radians(45)
-theta_i = math.radians(45)
-pt = superellipsoid_point_3d(phi_i, theta_i, a, b, c, n1, n2)
-a1.DatumPointByCoordinate(coords=pt)
+layer_face_points_45 = []
+theta_45 = math.radians(45)
+phi_0 = 0.0
+for layer_index in range(1, num_layers + 1):
+    frac = float((layer_thickness / 2))
+    a_i = a + frac + (layer_index - 1) * layer_thickness
+    b_i = b + frac + (layer_index - 1) * layer_thickness
+    c_i = c + frac + (layer_index - 1) * layer_thickness
+    pt = superellipsoid_point_3d(phi_0, theta_45, a_i, b_i, c_i, n1, n2)
+    layer_face_points_45.append(pt)
 
-phi_i = 1.1693705988362
-theta_i = math.radians(45)
-pt = superellipsoid_point_3d(phi_i, theta_i, a, b, c, n1, n2)
-p.DatumPointByCoordinate(coords=pt)"""
+layer_face_objs_45 = []
+for pt in layer_face_points_45:
+    found = s1.findAt((pt,))
+    if found:
+        layer_face_objs_45.append(found)
+
+if layer_face_objs_45:
+    a1.Set(faces=layer_face_objs_45, name='Set-Layer-z')
