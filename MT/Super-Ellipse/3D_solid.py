@@ -25,11 +25,11 @@ model.rootAssembly.regenerate()
 ################ Parameters #####################
 a, b, c = 150.0, 150.0, 150.0   # inner semi-axes
 total_length = c
-thick = 10.0                         # total thickness
-n1, n2 = 0.1, 2                   # shape exponents
+thick = 2.5                         # total thickness
+n1, n2 = 0.9, 2                   # shape exponents
 num_points = 30                 # points per curve
-num_layers = 6                  # number of layers through thickness
-num_theta_sections = 3          # number of θ sections(min 2): For even number, the number of partitions created will be (num_theta_sections + 1)
+num_layers = 1                  # number of layers through thickness
+num_theta_sections = 6          # number of θ sections(min 2): For even number, the number of partitions created will be (num_theta_sections + 1)
 
 a_out, b_out, c_out = a + thick, b + thick, c + thick  # outer semi-axes
 
@@ -103,6 +103,10 @@ def create_layer_part(model, layer_index, num_theta_sections):
     # --- Case 1 (phi=0°) ---
     inner_case1 = [superellipsoid_point_3d(0.0, th, a_i, b_i, c_i, n1, n2) for th in theta_vals]
     outer_case1 = [superellipsoid_point_3d(0.0, th, a_o, b_o, c_o, n1, n2) for th in theta_vals]
+    # --- Case 2 (phi=45°) ---
+    phi_forfiv = math.radians(45)
+    inner_case2 = [superellipsoid_point_3d(phi_forfiv, th, a_i, b_i, c_i, n1, n2) for th in theta_vals]
+    outer_case2 = [superellipsoid_point_3d(phi_forfiv, th, a_o, b_o, c_o, n1, n2) for th in theta_vals]
     part_name = "Layer_" + str(layer_index + 1)
     p = model.Part(name=part_name, dimensionality=THREE_D, type=DEFORMABLE_BODY)
     theta_data = []
@@ -134,8 +138,10 @@ def create_layer_part(model, layer_index, num_theta_sections):
         p.WireSpline(points=(p.datums[dp_inner_start.id], p.datums[dp_mid_start.id], p.datums[dp_outer_start.id]))
         theta_data.append({
             "theta_deg": theta_deg,
-            "inner_mid": inner_curve[len(inner_curve)//2],
-            "outer_mid": outer_curve[len(outer_curve)//2],
+            "inner_quat": inner_curve[len(inner_curve)//4],
+            "inner_threequat": inner_curve[len(inner_curve)*3//4],
+            "outer_quat": outer_curve[len(outer_curve)//4],
+            "outer_threequat": outer_curve[len(outer_curve)*3//4],
             "dp_mid_coord": p.datums[dp_mid.id].pointOn,
             "dp_mid_start_coord": p.datums[dp_mid_start.id].pointOn
         })
@@ -143,6 +149,10 @@ def create_layer_part(model, layer_index, num_theta_sections):
     create_datums(p, inner_case1 + outer_case1)
     create_wire_splines(p, inner_case1)
     create_wire_splines(p, outer_case1)
+    # --- Case 2 (phi=45°) wires ---
+    create_datums(p, inner_case2 + outer_case2)
+    create_wire_splines(p, inner_case2)
+    create_wire_splines(p, outer_case2)
     # --- Remove extra wires ---
     center = (0.0, 0.0, c_o)
     radius = 0.5
@@ -152,7 +162,6 @@ def create_layer_part(model, layer_index, num_theta_sections):
     RemoveWireEdges = list(edges_near_top) + list(edges_near_bottom)
     if RemoveWireEdges:
         p.RemoveWireEdges(wireEdgeList=RemoveWireEdges)
-    phi = 0.0
     num_theta_sections = len(theta_sections)
     inner_a, inner_b, inner_c = a_i, b_i, c_i
     outer_a, outer_b, outer_c = a_o, b_o, c_o
@@ -161,9 +170,11 @@ def create_layer_part(model, layer_index, num_theta_sections):
     loftsections = []
     for section in theta_data:
         pts = (
-            e1.findAt(coordinates=section["inner_mid"]),
+            e1.findAt(coordinates=section["inner_quat"]),
             e1.findAt(coordinates=section["dp_mid_coord"]),
-            e1.findAt(coordinates=section["outer_mid"]),
+            e1.findAt(coordinates=section["inner_threequat"]),
+            e1.findAt(coordinates=section["outer_quat"]),
+            e1.findAt(coordinates=section["outer_threequat"]),
             e1.findAt(coordinates=section["dp_mid_start_coord"]),
         )
         loftsections.append(pts)
@@ -172,11 +183,12 @@ def create_layer_part(model, layer_index, num_theta_sections):
         for i in range(len(theta_sections) - 1)
     ]
     search_tol = 0.1  # desired tolerance
-    inner_path_edges = []
-    outer_path_edges = []
+    inner_path_edges_zero = []
+    outer_path_edges_zero = []
     for t_deg in theta_mid:
         theta_rad = math.radians(t_deg)
         # Compute points
+        phi = 0.0
         inner_pt = superellipsoid_point_3d(phi, theta_rad, inner_a, inner_b, inner_c, n1, n2)
         outer_pt = superellipsoid_point_3d(phi, theta_rad, outer_a, outer_b, outer_c, n1, n2)
         # Get closest edge for inner point
@@ -185,21 +197,46 @@ def create_layer_part(model, layer_index, num_theta_sections):
             closest_inner = found_inner[0][1]
             edge_inner = e1.findAt((closest_inner,))
             if edge_inner:
-                inner_path_edges.append(edge_inner[0])
+                inner_path_edges_zero.append(edge_inner[0])
         # Get closest edge for outer point
         found_outer = e1.getClosest(coordinates=(tuple(outer_pt),), searchTolerance=search_tol)
         if found_outer:
             closest_outer = found_outer[0][1]
             edge_outer = e1.findAt((closest_outer,))
             if edge_outer:
-                outer_path_edges.append(edge_outer[0])
+                outer_path_edges_zero.append(edge_outer[0])
     # Convert to tuple for SolidLoft
-    inner_path_edges = tuple(inner_path_edges)
-    outer_path_edges = tuple(outer_path_edges)
+    inner_path_edges_zero = tuple(inner_path_edges_zero)
+    outer_path_edges_zero = tuple(outer_path_edges_zero)
+    inner_path_edges_fourfive = []
+    outer_path_edges_fourfive = []
+    for t_deg in theta_mid:
+        theta_rad = math.radians(t_deg)
+        # Compute points
+        phi = math.radians(45)
+        inner_pt = superellipsoid_point_3d(phi, theta_rad, inner_a, inner_b, inner_c, n1, n2)
+        outer_pt = superellipsoid_point_3d(phi, theta_rad, outer_a, outer_b, outer_c, n1, n2)
+        # Get closest edge for inner point
+        found_inner = e1.getClosest(coordinates=(tuple(inner_pt),), searchTolerance=search_tol)
+        if found_inner:
+            closest_inner = found_inner[0][1]
+            edge_inner = e1.findAt((closest_inner,))
+            if edge_inner:
+                inner_path_edges_fourfive.append(edge_inner[0])
+        # Get closest edge for outer point
+        found_outer = e1.getClosest(coordinates=(tuple(outer_pt),), searchTolerance=search_tol)
+        if found_outer:
+            closest_outer = found_outer[0][1]
+            edge_outer = e1.findAt((closest_outer,))
+            if edge_outer:
+                outer_path_edges_fourfive.append(edge_outer[0])
+    # Convert to tuple for SolidLoft
+    inner_path_edges_fourfive = tuple(inner_path_edges_fourfive)
+    outer_path_edges_fourfive = tuple(outer_path_edges_fourfive)
     # --- Define SolidLoft ---
     p.SolidLoft(
         loftsections=loftsections,
-        paths=(outer_path_edges, inner_path_edges),
+        paths=(outer_path_edges_zero, inner_path_edges_zero, inner_path_edges_fourfive, outer_path_edges_fourfive),
         globalSmoothing=ON
     )
     return p
@@ -319,7 +356,7 @@ for i in range(0, len(phi_vals)):
     phi_surf.append(phi_vals[i] - math.radians(10))
 
 ph_o = math.radians(90)
-if n2 >= 1.0:
+if n2 and n1 >= 1.0:
     x = math.radians(1)
 else:
     x = math.radians(0.01)
@@ -336,7 +373,6 @@ faces_combined = []
 for i, phi_i in enumerate(phi_surf):
     theta_i = math.radians(45)
     pt = superellipsoid_point_3d(phi_i, theta_i, a, b, c, n1, n2)
-    p.DatumPointByCoordinate(coords=pt)
     found = s1.getClosest(coordinates=(tuple(pt),), searchTolerance=search_tol)
     if found:
         face_pt = found[0][1]
