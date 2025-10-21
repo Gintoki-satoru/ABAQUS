@@ -13,7 +13,8 @@ import math
 import csv
 
 
-path_modules = 'N:\\Sachdeva\\MT_Nair\\ABAQUS\\MT\\Macros'
+# path_modules = 'N:\\Sachdeva\\MT_Nair\\ABAQUS\\MT\\Macros'
+path_modules = 'D:\\psingh\\MT\\ABAQUS\\MT\\Macros'
 # path_modules = r"C:\Users\lenovo\Desktop\Aerospace\Thesis\ABAQUS\MT\Macros"
 os.chdir(path_modules)
 
