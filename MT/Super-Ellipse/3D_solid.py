@@ -26,10 +26,10 @@ model.rootAssembly.regenerate()
 a, b, c = 150.0, 100.0, 150.0   # inner semi-axes
 total_length = c
 thick = 2.5                     # total thickness
-n1, n2 = 0.1, 0.1               # shape exponents
-num_points = 20                 # points per curve
-num_layers = 1                  # number of layers through thickness
-num_theta_sections = 7          # number of θ sections(min 2): For even number, the number of partitions created will be (num_theta_sections + 1)
+n1, n2 = 0.2, 0.2               # shape exponents
+num_points = 30                 # points per curve
+num_layers = 2                  # number of layers through thickness
+num_theta_sections = 21          # number of θ sections(min 2): For even number, the number of partitions created will be (num_theta_sections + 1)
 num_partitions = 4              # number of partitions for face BC
 pressure_value = 0.1            # pressure magnitude (MPa)
 mesh_size = 2.0                 # mesh size
@@ -61,34 +61,32 @@ def create_wire_splines(part, datum_points, smoothClosed=True):
                            smoothClosedSpline=ON if smoothClosed else OFF)
     return wire
 
-def compute_theta_sections(num_theta_sections, n2, decimals=2):
+
+def compute_theta_sections(num_theta_sections, n2, alpha=1.0, round_output=None):
+    """
+    Adaptive theta distribution [0°,90°], symmetric about 45°.
+    Keeps full float precision; optional rounding only for display.
+    """
     if num_theta_sections < 2:
         raise ValueError("num_theta_sections must be ≥ 2")
     if num_theta_sections == 2:
         return [0.0, 90.0]
     if num_theta_sections % 2 == 0:
-        num_theta_sections += 1  # ensures symmetry about 45°
-    mid_angle = 45.0
-    half_count = (num_theta_sections - 1) // 2
-    lower_half = [0.0 + (mid_angle - 0.0) * i / half_count for i in range(half_count)]
-    upper_half = [mid_angle + (90.0 - mid_angle) * i / half_count for i in range(1, half_count + 1)]
-    theta_sections = lower_half + [mid_angle] + upper_half
-    if num_theta_sections >= 7:
-        if n2 <= 1.0 / 6:
-            theta_sections[1] = 0.01
-            theta_sections[2] = 1.0
-            theta_sections[-3] = 89.0
-            theta_sections[-2] = 89.99
-        elif n2 <= 1.0 / 3:
-            theta_sections[1] = 1.0
-            theta_sections[-2] = 89.0
-        elif n2 <= 1.0 / 2:
-            theta_sections[1] = 5.0
-            theta_sections[-2] = 85.0
-        # else: no modification for larger n2
-        theta_sections = sorted(theta_sections)
-    theta_sections = [round(t, decimals) for t in theta_sections]
-    return theta_sections
+        num_theta_sections += 1
+    p = max(1.0, (1.0 / max(n2, 1e-6)) ** alpha)
+    u_vals = [i / float(num_theta_sections - 1) for i in range(num_theta_sections)]
+    def s_curve(u, p):
+        up, vp = u ** p, (1.0 - u) ** p
+        return up / (up + vp) if (up + vp) != 0.0 else 0.5
+    thetas = [90.0 * s_curve(u, p) for u in u_vals]
+    thetas[0], thetas[-1] = 0.0, 90.0
+    mid = len(thetas) // 2
+    for i in range(mid):
+        thetas[-(i + 1)] = 90.0 - thetas[i]
+    thetas[mid] = 45.0
+    if round_output is not None:
+        return [round(t, round_output) for t in thetas]
+    return thetas
 
 def create_layer_part(model, layer_index, num_theta_sections):
     # --- Layer fraction and scaling ---
@@ -101,10 +99,38 @@ def create_layer_part(model, layer_index, num_theta_sections):
     phi_vals = [math.radians(i * 90 / num_points) for i in range(num_points + 1)]
     theta_vals = [math.radians(i * 90 / num_points) for i in range(num_points + 1)]
     # --- Determine θ angles for cross-sections ---
-    theta_sections = compute_theta_sections(num_theta_sections, n2)
     theta_vals_deg = [math.degrees(t) for t in theta_vals]
-    merged_angles = sorted(
-    set(round(val, 2) for val in (theta_vals_deg + theta_sections)))
+    def merge_limit_keep_all_sections(theta_vals_deg, theta_sections, tol=0.1):
+        anchors = {0.0, 45.0, 90.0}
+        num_target = len(theta_vals_deg)
+        keep_sections = list(dict.fromkeys(theta_sections))  # preserves exact order
+        keep = set(keep_sections) | anchors
+        merged = list(theta_vals_deg)
+        for s in keep_sections:
+            if all(abs(s - m) > 1e-12 for m in merged):
+                merged.append(s)
+        merged = sorted(merged)
+        if len(merged) > num_target:
+            removable = [a for a in merged if a not in keep]
+            distances = [(min(abs(a - s) for s in keep_sections), a) for a in removable]
+            distances.sort(key=lambda x: x[0])
+            remove_count = len(merged) - num_target
+            to_remove = {val for _, val in distances[:remove_count]}
+            merged = [a for a in merged if a not in to_remove]
+        for s in keep_sections + list(anchors):
+            if all(abs(s - m) > 1e-12 for m in merged):
+                merged.append(s)
+        merged = sorted(merged)
+        while len(merged) > num_target:
+            removable = [a for a in merged if a not in keep]
+            if not removable:
+                break
+            distances = [(min(abs(a - s) for s in keep_sections), a) for a in removable]
+            farthest = max(distances, key=lambda x: x[0])[1]
+            merged.remove(farthest)
+        return sorted(merged)
+    theta_sections = compute_theta_sections(num_theta_sections, n2)
+    merged_angles = merge_limit_keep_all_sections(theta_vals_deg, theta_sections, tol=0.1)
     theta_vals = [math.radians(r) for r in merged_angles]
     # --- Case 1 (phi=0°) ---
     inner_case1 = [superellipsoid_point_3d(0.0, th, a_i, b_i, c_i, n1, n2) for th in theta_vals]
@@ -258,18 +284,46 @@ def create_layer_part_wo_45(model, layer_index, num_theta_sections):
     phi_vals = [math.radians(i * 90 / num_points) for i in range(num_points + 1)]
     theta_vals = [math.radians(i * 90 / num_points) for i in range(num_points + 1)]
     # --- Determine θ angles for cross-sections ---
-    theta_sections = compute_theta_sections(num_theta_sections, n2)
     theta_vals_deg = [math.degrees(t) for t in theta_vals]
-    merged_angles = sorted(
-    set(round(val, 2) for val in (theta_vals_deg + theta_sections)))
+    def merge_limit_keep_all_sections(theta_vals_deg, theta_sections, tol=0.1):
+        anchors = {0.0, 45.0, 90.0}
+        num_target = len(theta_vals_deg)
+        keep_sections = list(dict.fromkeys(theta_sections))  # preserves exact order
+        keep = set(keep_sections) | anchors
+        merged = list(theta_vals_deg)
+        for s in keep_sections:
+            if all(abs(s - m) > 1e-12 for m in merged):
+                merged.append(s)
+        merged = sorted(merged)
+        if len(merged) > num_target:
+            removable = [a for a in merged if a not in keep]
+            distances = [(min(abs(a - s) for s in keep_sections), a) for a in removable]
+            distances.sort(key=lambda x: x[0])
+            remove_count = len(merged) - num_target
+            to_remove = {val for _, val in distances[:remove_count]}
+            merged = [a for a in merged if a not in to_remove]
+        for s in keep_sections + list(anchors):
+            if all(abs(s - m) > 1e-12 for m in merged):
+                merged.append(s)
+        merged = sorted(merged)
+        while len(merged) > num_target:
+            removable = [a for a in merged if a not in keep]
+            if not removable:
+                break
+            distances = [(min(abs(a - s) for s in keep_sections), a) for a in removable]
+            farthest = max(distances, key=lambda x: x[0])[1]
+            merged.remove(farthest)
+        return sorted(merged)
+    theta_sections = compute_theta_sections(num_theta_sections, n2)
+    merged_angles = merge_limit_keep_all_sections(theta_vals_deg, theta_sections, tol=0.1)
     theta_vals = [math.radians(r) for r in merged_angles]
     # --- Case 1 (phi=0°) ---
     inner_case1 = [superellipsoid_point_3d(math.radians(0), th, a_i, b_i, c_i, n1, n2) for th in theta_vals]
     outer_case1 = [superellipsoid_point_3d(math.radians(0), th, a_o, b_o, c_o, n1, n2) for th in theta_vals]
     # --- Case 2 (phi=45°) ---
-    '''phi_forfiv = math.radians(45)
-    inner_case2 = [superellipsoid_point_3d(phi_forfiv, th, a_i, b_i, c_i, n1, n2) for th in theta_vals]'''
-    # outer_case2 = [superellipsoid_point_3d(phi_forfiv, th, a_o, b_o, c_o, n1, n2) for th in theta_vals]
+    phi_forfiv = math.radians(45)
+    # inner_case2 = [superellipsoid_point_3d(phi_forfiv, th, a_i, b_i, c_i, n1, n2) for th in theta_vals]
+    outer_case2 = [superellipsoid_point_3d(phi_forfiv, th, a_o, b_o, c_o, n1, n2) for th in theta_vals]
     part_name = "Layer_" + str(layer_index + 1)
     p = model.Part(name=part_name, dimensionality=THREE_D, type=DEFORMABLE_BODY)
     theta_data = []
@@ -309,14 +363,15 @@ def create_layer_part_wo_45(model, layer_index, num_theta_sections):
             "dp_mid_start_coord": p.datums[dp_mid_start.id].pointOn
         })
     # --- Case 1 (phi=0°) wires ---
-    create_datums(p, inner_case1 + outer_case1)
+    create_datums(p, inner_case1)
     create_wire_splines(p, inner_case1)
+    create_datums(p, outer_case1)
     create_wire_splines(p, outer_case1)
     # --- Case 2 (phi=45°) wires ---
     '''create_datums(p, inner_case2)
-    create_wire_splines(p, inner_case2)'''
-    #create_datums(p, outer_case2)
-    #create_wire_splines(p, outer_case2)
+    create_wire_splines(p, inner_case2)
+    create_datums(p, outer_case2)
+    create_wire_splines(p, outer_case2)'''
     # --- Remove extra wires ---
     center = (0.0, 0.0, c_o)
     radius = 0.5
@@ -334,7 +389,7 @@ def create_layer_part_wo_45(model, layer_index, num_theta_sections):
     loftsections = []
     for section in theta_data:
         pts = (
-            e1.findAt(coordinates=section["inner_quat"]),
+            # e1.findAt(coordinates=section["inner_quat"]),
             e1.findAt(coordinates=section["dp_mid_coord"]),
             e1.findAt(coordinates=section["inner_threequat"]),
             e1.findAt(coordinates=section["outer_quat"]),
@@ -353,8 +408,8 @@ def create_layer_part_wo_45(model, layer_index, num_theta_sections):
         theta_rad = math.radians(t_deg)
         # Compute points
         phi = math.radians(0)
-        inner_pt = superellipsoid_point_3d(phi, theta_rad, inner_a, inner_b, inner_c, n1, n2)
         outer_pt = superellipsoid_point_3d(phi, theta_rad, outer_a, outer_b, outer_c, n1, n2)
+        inner_pt = superellipsoid_point_3d(phi, theta_rad, inner_a, inner_b, inner_c, n1, n2)
         # Get closest edge for inner point
         found_inner = e1.getClosest(coordinates=(tuple(inner_pt),), searchTolerance=search_tol)
         if found_inner:
@@ -371,15 +426,15 @@ def create_layer_part_wo_45(model, layer_index, num_theta_sections):
                 outer_path_edges_zero.append(edge_outer[0])
     # Convert to tuple for SolidLoft
     inner_path_edges_zero = tuple(inner_path_edges_zero)
-    outer_path_edges_zero = tuple(outer_path_edges_zero)
-    '''inner_path_edges_fourfive = []
-    #outer_path_edges_fourfive = []
+    '''outer_path_edges_zero = tuple(outer_path_edges_zero)
+    # inner_path_edges_fourfive = []
+    outer_path_edges_fourfive = []
     for t_deg in theta_mid:
         theta_rad = math.radians(t_deg)
         # Compute points
         phi = math.radians(45)
+        outer_pt = superellipsoid_point_3d(phi, theta_rad, outer_a, outer_b, outer_c, n1, n2)
         inner_pt = superellipsoid_point_3d(phi, theta_rad, inner_a, inner_b, inner_c, n1, n2)
-        # outer_pt = superellipsoid_point_3d(phi, theta_rad, outer_a, outer_b, outer_c, n1, n2)
         # Get closest edge for inner point
         found_inner = e1.getClosest(coordinates=(tuple(inner_pt),), searchTolerance=search_tol)
         if found_inner:
@@ -395,8 +450,8 @@ def create_layer_part_wo_45(model, layer_index, num_theta_sections):
             if edge_outer:
                 outer_path_edges_fourfive.append(edge_outer[0])
     # Convert to tuple for SolidLoft
-    inner_path_edges_fourfive = tuple(inner_path_edges_fourfive)
-    # outer_path_edges_fourfive = tuple(outer_path_edges_fourfive)'''
+    # inner_path_edges_fourfive = tuple(inner_path_edges_fourfive)
+    outer_path_edges_fourfive = tuple(outer_path_edges_fourfive)'''
     # --- Define SolidLoft ---
     p.SolidLoft(
         loftsections=loftsections,
@@ -406,13 +461,20 @@ def create_layer_part_wo_45(model, layer_index, num_theta_sections):
     return p
 
 model = mdb.models['SuperEllipse']
+use_wo_45 = False  # flag: once a layer fails with 45°
 for i in range(num_layers):
+    if use_wo_45:
+        print("Layer", i + 1, ": Using _wo_45 method due to previous failure.")
+        create_layer_part_wo_45(model, i, num_theta_sections)
+        continue
+
     try:
         create_layer_part(model, i, num_theta_sections)
-        print("Layer created successfully with 45° section.")
+        print("Layer", i + 1, ": Created successfully with 45° path.")
     except Exception as e:
-        print("Layer failed with 45° section due to:", e)
+        print("Reason:", e)
         create_layer_part_wo_45(model, i, num_theta_sections)
+        use_wo_45 = True  # from now on, always use _wo_45
 
 ############ Create SuperEllipsoid by merging layers ############
 
@@ -643,6 +705,7 @@ for theta_val, set_suffix in zip([0.0, math.radians(90)], ['y', 'x']):
         ]
         for phi_mid in phi_set:
             pt = superellipsoid_point_3d(phi_mid, theta_val, a_i, b_i, c_i, n1, n2)
+            a1.DatumPointByCoordinate(coords=pt)
             layer_face_points.append(pt)
     layer_face_objs = []
     for pt in layer_face_points:
