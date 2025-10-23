@@ -25,10 +25,12 @@ session.journalOptions.setValues(replayGeometry=COORDINATE, recoverGeometry=COOR
 
 #############################   PARAMETERS    #############################
 
-m_a_inner = 150.0  # Semi-major axis of the inner ellipse
+# Note: All dimensions are to be given as a float (e.g., 10.0 not 10)
+
+m_a_inner = 100.0  # Semi-major axis of the inner ellipse
 m_b_inner = 100.0  # Semi-minor axis of the inner ellipse
 
-thick = 2.5  # Thickness
+thick = 5.0  # Thickness
 
 m_a_outer = m_a_inner + thick
 m_b_outer = m_b_inner + thick
@@ -176,11 +178,9 @@ for i in range(1, N+1):
 if edges_combined:
     a.Set(edges=edges_combined, name='top_load')
 
-
 # Create Surface
 side1Edges1 = e.findAt(((ct.pol2cart_x(m_a_inner, phi), ct.pol2cart_y(m_b_inner, phi), 0.0), ))
 a.Surface(side1Edges=side1Edges1, name='load')
-
 
 ############ Step
 myModel.StaticStep(name='LoadingStep', previous='Initial')
@@ -190,10 +190,8 @@ myModel.fieldOutputRequests['F-Output-1'].setValues(
 ######## Boundary Conditions
 
 region = a.sets['top_load']
-mdb.models['EllipseModel_2D'].DisplacementBC(name='top_load_BC', 
-    createStepName='LoadingStep', region=region, u1=0.0, u2=UNSET, ur3=UNSET, 
-    amplitude=UNSET, fixed=OFF, distributionType=UNIFORM, fieldName='', 
-    localCsys=None)
+mdb.models['EllipseModel_2D'].XsymmBC(name='top_load_BC', 
+    createStepName='LoadingStep', region=region, localCsys=None)
 
 region = a.sets['bottom_load']
 mdb.models['EllipseModel_2D'].YsymmBC(name='bottom_load_BC', 
@@ -269,7 +267,6 @@ a_asm.SetFromNodeLabels(
     name=set_name,
     nodeLabels=((instance_name, tuple(node_ids)),)
 )
-
 
 model_name = 'EllipseModel_2D'
 instance_name = 'EllipsePart-1'

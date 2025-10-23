@@ -23,13 +23,13 @@ model.rootAssembly.clearGeometryCache()
 model.rootAssembly.regenerate()
 
 ################ Parameters #####################
-a, b, c = 150.0, 100.0, 150.0   # inner semi-axes
+a, b, c = 100.0, 100.0, 100.0   # inner semi-axes
 total_length = c
-thick = 2.5                     # total thickness
-n1, n2 = 0.2, 0.2               # shape exponents
+thick = 5.0                     # total thickness
+n1, n2 = 0.1, 2.0               # shape exponents
 num_points = 30                 # points per curve
-num_layers = 2                  # number of layers through thickness
-num_theta_sections = 21          # number of θ sections(min 2): For even number, the number of partitions created will be (num_theta_sections + 1)
+num_layers = 1                  # number of layers through thickness
+num_theta_sections = 25          # number of θ sections(min 2): For even number, the number of partitions created will be (num_theta_sections + 1)
 num_partitions = 4              # number of partitions for face BC
 pressure_value = 0.1            # pressure magnitude (MPa)
 mesh_size = 2.0                 # mesh size
@@ -467,7 +467,6 @@ for i in range(num_layers):
         print("Layer", i + 1, ": Using _wo_45 method due to previous failure.")
         create_layer_part_wo_45(model, i, num_theta_sections)
         continue
-
     try:
         create_layer_part(model, i, num_theta_sections)
         print("Layer", i + 1, ": Created successfully with 45° path.")
@@ -543,7 +542,7 @@ def offset_point_along_normal(point, normal, t):
     return tuple(point[i] + t*normal[i] for i in range(3))
 
 theta_case = math.radians(0)
-phi_vals = [math.radians(15), math.radians(75)]
+phi_vals = [math.radians(15)]
 
 for phi_example in phi_vals:
     # Compute inner and outer points on superellipsoid surface
@@ -573,9 +572,8 @@ for phi_example in phi_vals:
 
 # ---- Partition for face ----#
 
-num_partitions = 2  # number of φ partitions (between 15° and 75°)
 phi_min = math.radians(15)
-phi_max = math.radians(75)
+phi_max = math.radians(90)
 phi_step = (phi_max - phi_min) / (num_partitions + 1)
 phi_face = [phi_min + i * phi_step for i in range(1, num_partitions + 1)]
 
@@ -698,14 +696,13 @@ for theta_val, set_suffix in zip([0.0, math.radians(90)], ['y', 'x']):
         a_i = a + frac + (layer_index - 1) * layer_thickness
         b_i = b + frac + (layer_index - 1) * layer_thickness
         c_i = c + frac + (layer_index - 1) * layer_thickness
-        phi_set = [
-            phi_vals[0] / 2,
-            (phi_vals[0] + phi_vals[1]) / 2 + phi_vals[0],
-            math.radians(90) - phi_vals[0] / 2
-        ]
+        phi_boundaries = [0.0] + [math.radians(15)] + phi_face + [math.radians(90)]
+        phi_set = []
+        for j in range(len(phi_boundaries) - 1):
+            mid_phi = 0.5 * (phi_boundaries[j] + phi_boundaries[j + 1])
+            phi_set.append(mid_phi)
         for phi_mid in phi_set:
             pt = superellipsoid_point_3d(phi_mid, theta_val, a_i, b_i, c_i, n1, n2)
-            a1.DatumPointByCoordinate(coords=pt)
             layer_face_points.append(pt)
     layer_face_objs = []
     for pt in layer_face_points:
