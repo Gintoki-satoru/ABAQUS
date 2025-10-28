@@ -23,7 +23,7 @@ model.rootAssembly.clearGeometryCache()
 model.rootAssembly.regenerate()
 
 ################ Parameters #####################
-a, b, c = 100.0, 100.0, 500.0   # inner semi-axes
+a, b, c = 450.0, 100.0, 500.0   # inner semi-axes
 total_length = c
 thick = 5.0                     # total thickness
 n1, n2 = 0.5, 0.5               # shape exponents
@@ -419,32 +419,6 @@ def create_layer_part_wo_45(model, layer_index, num_theta_sections):
                 outer_path_edges_zero.append(edge_outer[0])
     # Convert to tuple for SolidLoft
     inner_path_edges_zero = tuple(inner_path_edges_zero)
-    '''outer_path_edges_zero = tuple(outer_path_edges_zero)
-    # inner_path_edges_fourfive = []
-    outer_path_edges_fourfive = []
-    for t_deg in theta_mid:
-        theta_rad = math.radians(t_deg)
-        # Compute points
-        phi = math.radians(45)
-        outer_pt = superellipsoid_point_3d(phi, theta_rad, outer_a, outer_b, outer_c, n1, n2)
-        inner_pt = superellipsoid_point_3d(phi, theta_rad, inner_a, inner_b, inner_c, n1, n2)
-        # Get closest edge for inner point
-        found_inner = e1.getClosest(coordinates=(tuple(inner_pt),), searchTolerance=search_tol)
-        if found_inner:
-            closest_inner = found_inner[0][1]
-            edge_inner = e1.findAt((closest_inner,))
-            if edge_inner:
-                inner_path_edges_fourfive.append(edge_inner[0])
-        # Get closest edge for outer point
-        found_outer = e1.getClosest(coordinates=(tuple(outer_pt),), searchTolerance=search_tol)
-        if found_outer:
-            closest_outer = found_outer[0][1]
-            edge_outer = e1.findAt((closest_outer,))
-            if edge_outer:
-                outer_path_edges_fourfive.append(edge_outer[0])
-    # Convert to tuple for SolidLoft
-    # inner_path_edges_fourfive = tuple(inner_path_edges_fourfive)
-    outer_path_edges_fourfive = tuple(outer_path_edges_fourfive)'''
     # --- Define SolidLoft ---
     p.SolidLoft(
         loftsections=loftsections,
@@ -515,6 +489,62 @@ p.SectionAssignment(region=region, sectionName='AL_section', offset=0.0,
     thicknessAssignment=FROM_SECTION)
 mdb.models['SuperEllipse'].parts['SuperEllipsoid'].setValues(
     geometryRefinement=FINE)
+
+############ Step ############
+model.StaticStep(name='LoadingStep', previous='Initial', 
+    initialInc=1, minInc=1e-05, maxInc=1.0)
+
+############ Load ############
+a1 = mdb.models['SuperEllipse'].rootAssembly
+sf = a1.instances['SuperEllipsoid-1'].faces
+
+phi = math.radians(45.0)
+theta = math.radians(45.0)
+
+pt = superellipsoid_point_3d(phi, theta, a, b, c, n1, n2)
+
+search_tol = 0.3
+closest = sf.getClosest(coordinates=(pt,), searchTolerance=search_tol)
+
+if not closest:
+    raise RuntimeError("No nearest face found. Increase search_tol.")
+
+proj_pt = closest[0][1]
+face_array = sf.findAt((proj_pt,))
+region = regionToolset.Region(side1Faces=face_array)
+
+model.Pressure(
+    name='Pressure_load',
+    createStepName='LoadingStep',
+    region=region,
+    magnitude=pressure_value
+)
+
+############ BC ############
+a_m = a + thick/2.0
+b_m = b + thick/2.0
+c_m = c + thick/2.0
+
+search_tol = 0.3
+def face_at(phi_deg, theta_deg):
+    phi = math.radians(phi_deg)
+    theta = math.radians(theta_deg)
+    pt = superellipsoid_point_3d(phi, theta, a_m, b_m, c_m, n1, n2)
+    closest = sf.getClosest(coordinates=(pt,), searchTolerance=search_tol)
+    if not closest:
+        raise RuntimeError("No face found")
+    proj = closest[0][1]
+    face_array = sf.findAt((proj,))
+    return face_array
+
+regionX = regionToolset.Region(faces=face_at(45, 90))
+model.XsymmBC(name='BC-X', createStepName='Initial', region=regionX)
+
+regionY = regionToolset.Region(faces=face_at(45, 0))
+model.YsymmBC(name='BC-Y', createStepName='Initial', region=regionY)
+
+regionZ = regionToolset.Region(faces=face_at(0, 45))
+model.ZsymmBC(name='BC-Z', createStepName='Initial', region=regionZ)
 
 ############ Partitioning ############
 
@@ -629,149 +659,6 @@ for theta_case in theta_spl:
             )
         else:
             print("No faces found for φ =", round(math.degrees(phi_example), 2))
-
-
-############ Step ############
-model.StaticStep(name='LoadingStep', previous='Initial', 
-    initialInc=1, minInc=1e-05, maxInc=1.0)
-
-############ Create Surface ############
-### Strat - 1 ###
-phi_surf = []
-
-for i in range(0, len(phi_vals)):
-    phi_surf.append(phi_vals[i] - math.radians(10))
-
-ph_o = math.radians(90)
-if n2 and n1 >= 1.0:
-    x = math.radians(1)
-else:
-    x = math.radians(0.01)
-
-phi_surf.append(ph_o - x)
-phi_surf_deg = [math.degrees(t) for t in phi_surf]
-
-a1 = mdb.models['SuperEllipse'].rootAssembly
-s1 = a1.instances['SuperEllipsoid-1'].faces
-faces_combined = []
-
-for i, phi_i in enumerate(phi_surf):
-    theta_i = math.radians(1)
-    pt = superellipsoid_point_3d(phi_i, theta_i, a, b, c, n1, n2)
-    found = None
-    search_tol = 0.1
-    max_tol = thick
-    while search_tol <= max_tol:
-        found = s1.getClosest(coordinates=(tuple(pt),), searchTolerance=search_tol)
-        if found:
-            break
-        search_tol += 0.1
-    if found:
-        face_pt = found[0][1]
-        seq_face = s1.findAt((face_pt,),)
-        if seq_face:
-            faces_combined.append(seq_face)
-
-# --- Combine faces into one surface ---
-if faces_combined:
-    a1.Surface(side1Faces=tuple(faces_combined), name='Surf_Load')
-else:
-    print("No faces found for surface creation.")
-
-########### Create Set ############
-
-layer_thickness = float(thick / num_layers)
-
-for theta_val, set_suffix in zip([0.0, math.radians(90)], ['y', 'x']):
-    layer_face_points = []
-    for layer_index in range(1, num_layers + 1):
-        frac = float(layer_thickness / 2)
-        a_i = a + frac + (layer_index - 1) * layer_thickness
-        b_i = b + frac + (layer_index - 1) * layer_thickness
-        c_i = c + frac + (layer_index - 1) * layer_thickness
-        phi_boundaries = [0.0] + [math.radians(15)] + phi_face + [math.radians(90)]
-        phi_set = []
-        for j in range(len(phi_boundaries) - 1):
-            mid_phi = 0.5 * (phi_boundaries[j] + phi_boundaries[j + 1])
-            phi_set.append(mid_phi)
-        for phi_mid in phi_set:
-            pt = superellipsoid_point_3d(phi_mid, theta_val, a_i, b_i, c_i, n1, n2)
-            layer_face_points.append(pt)
-    layer_face_objs = []
-    for pt in layer_face_points:
-        found_face = None
-        search_tol = 0.1
-        max_tol = thick
-        while search_tol <= max_tol:
-            try:
-                closest = s1.getClosest((tuple(pt),), searchTolerance=search_tol)
-                if closest:
-                    closest_point = closest[0][1]
-                    seq_face = s1.findAt((closest_point,),)
-                    if seq_face:
-                        found_face = seq_face
-                        break
-            except:
-                pass
-            search_tol += 0.1
-        if found_face:
-            layer_face_objs.append(found_face)
-    if layer_face_objs:
-        a1.Set(faces=tuple(layer_face_objs), name='Set-Layer-' + set_suffix)
-
-layer_face_points_45 = []
-theta_45 = math.radians(45)
-phi_0 = 0.0
-
-for layer_index in range(1, num_layers + 1):
-    frac = float(layer_thickness / 2)
-    a_i = a + frac + (layer_index - 1) * layer_thickness
-    b_i = b + frac + (layer_index - 1) * layer_thickness
-    c_i = c + frac + (layer_index - 1) * layer_thickness
-    pt = superellipsoid_point_3d(phi_0, theta_45, a_i, b_i, c_i, n1, n2)
-    layer_face_points_45.append(pt)
-
-layer_face_objs_45 = []
-for pt in layer_face_points_45:
-    found_face = None
-    search_tol = 0.1
-    max_tol = thick
-    while search_tol <= max_tol:
-        try:
-            closest = s1.getClosest((tuple(pt),), searchTolerance=search_tol)
-            if closest:
-                closest_point = closest[0][1]
-                seq_face = s1.findAt((closest_point,),)
-                if seq_face:
-                    found_face = seq_face
-                    break
-        except:
-            pass
-        search_tol += 0.1
-    if found_face:
-        layer_face_objs_45.append(found_face)
-
-if layer_face_objs_45:
-    a1.Set(faces=tuple(layer_face_objs_45), name='Set-Layer-z')
-else:
-    print("No faces found for Set-Layer-z.")
-
-############ Load ############
-model.Pressure(name='SurfLoad', createStepName='LoadingStep', 
-    region=a1.surfaces['Surf_Load'], magnitude=pressure_value)
-
-############ BC ############
-region = a1.sets['Set-Layer-x']
-mdb.models['SuperEllipse'].XsymmBC(name='BC-2', createStepName='Initial', 
-    region=region, localCsys=None)
-
-region = a1.sets['Set-Layer-y']
-mdb.models['SuperEllipse'].YsymmBC(name='BC-1', createStepName='Initial', 
-    region=region, localCsys=None)
-
-region = a1.sets['Set-Layer-z']
-mdb.models['SuperEllipse'].ZsymmBC(name='BC-3', createStepName='Initial', 
-    region=region, localCsys=None)
 
 ############ Mesh ############
 p1 = mdb.models['SuperEllipse'].parts['SuperEllipsoid']
