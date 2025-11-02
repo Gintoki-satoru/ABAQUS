@@ -25,13 +25,13 @@ model.rootAssembly.regenerate()
 ################ Parameters #####################
 a, b, c = 100.0, 100.0, 500.0   # inner semi-axes
 total_length = c
-thick = 5.0                     # total thickness
+thick = 4.0                     # total thickness
 n1, n2 = 0.5, 0.5               # shape exponents
 num_points = 30                 # points per curve
 num_layers = 1                  # number of layers through thickness
 num_theta_sections = 25          # number of θ sections(min 2): For even number, the number of partitions created will be (num_theta_sections + 1)
 num_partitions = 4              # number of partitions for face BC
-pressure_value = 12            # pressure magnitude (MPa)
+pressure_value = 0.312            # pressure magnitude (MPa)
 mesh_size = 2.0                 # mesh size
 
 a_out, b_out, c_out = a + thick, b + thick, c + thick  # outer semi-axes
@@ -83,6 +83,21 @@ def compute_theta_sections(num_theta_sections, n2, alpha=1.0, round_output=None)
     if round_output is not None:
         return [round(t, round_output) for t in thetas]
     return thetas
+
+def superellipsoid_normal(phi, theta, a, b, c, n1, n2):
+    """Analytical unit normal vector on superellipsoid surface."""
+    cphi, sphi = math.cos(phi), math.sin(phi)
+    ctheta, stheta = math.cos(theta), math.sin(theta)
+    # Use your signed_power(base, exp)
+    nx = (1.0 / a) * signed_power(cphi, 2 - n1) * signed_power(ctheta, 2 - n2)
+    ny = (1.0 / b) * signed_power(cphi, 2 - n1) * signed_power(stheta, 2 - n2)
+    nz = (1.0 / c) * signed_power(sphi, 2 - n1)
+    # Normalize
+    norm = math.sqrt(nx**2 + ny**2 + nz**2)
+    return (nx / norm, ny / norm, nz / norm)
+
+def offset_point_along_normal(point, normal, t):
+    return tuple(point[i] + t*normal[i] for i in range(3))
 
 def create_layer_part(model, layer_index, num_theta_sections):
     # Layer fraction and scaling
@@ -453,23 +468,6 @@ def create_layer_part_wo_45(model, layer_index, num_theta_sections):
     )
     return p
 
-model = mdb.models['SuperEllipse']
-use_wo_45 = False  # flag: once a layer fails with 45°
-for i in range(num_layers):
-    if use_wo_45:
-        print("Layer", i + 1, ": Using _wo_45 method due to previous failure.")
-        create_layer_part_wo_45(model, i, num_theta_sections)
-        continue
-    try:
-        create_layer_part(model, i, num_theta_sections)
-        print("Layer", i + 1, ": Created successfully with 45° path.")
-    except Exception as e:
-        print("Reason:", e)
-        create_layer_part_wo_45(model, i, num_theta_sections)
-        use_wo_45 = True  # from now on, always use _wo_45
-
-############ Create SuperEllipsoid by merging layers ############
-
 def assemble_and_merge_layers(num_layers):
     assembly = model.rootAssembly
     assembly.DatumCsysByDefault(CARTESIAN)
@@ -492,6 +490,25 @@ def assemble_and_merge_layers(num_layers):
     else:
         mdb.models['SuperEllipse'].parts.changeKey(fromName='Layer_1',toName='SuperEllipsoid')
         mdb.models['SuperEllipse'].rootAssembly.features.changeKey(fromName='Layer_1-1', toName='SuperEllipsoid-1')
+
+
+############ Create layers ############
+model = mdb.models['SuperEllipse']
+use_wo_45 = False  # flag: once a layer fails with 45°
+for i in range(num_layers):
+    if use_wo_45:
+        print("Layer", i + 1, ": Using _wo_45 method due to previous failure.")
+        create_layer_part_wo_45(model, i, num_theta_sections)
+        continue
+    try:
+        create_layer_part(model, i, num_theta_sections)
+        print("Layer", i + 1, ": Created successfully with 45° path.")
+    except Exception as e:
+        print("Reason:", e)
+        create_layer_part_wo_45(model, i, num_theta_sections)
+        use_wo_45 = True  # from now on, always use _wo_45
+
+############ Create SuperEllipsoid by merging layers ############
 
 assemble_and_merge_layers(num_layers)
 
@@ -519,20 +536,6 @@ mdb.models['SuperEllipse'].parts['SuperEllipsoid'].setValues(
 ############ Partitioning ############
 
 #### Strat - 4 ####
-def superellipsoid_normal(phi, theta, a, b, c, n1, n2):
-    """Analytical unit normal vector on superellipsoid surface."""
-    cphi, sphi = math.cos(phi), math.sin(phi)
-    ctheta, stheta = math.cos(theta), math.sin(theta)
-    # Use your signed_power(base, exp)
-    nx = (1.0 / a) * signed_power(cphi, 2 - n1) * signed_power(ctheta, 2 - n2)
-    ny = (1.0 / b) * signed_power(cphi, 2 - n1) * signed_power(stheta, 2 - n2)
-    nz = (1.0 / c) * signed_power(sphi, 2 - n1)
-    # Normalize
-    norm = math.sqrt(nx**2 + ny**2 + nz**2)
-    return (nx / norm, ny / norm, nz / norm)
-
-def offset_point_along_normal(point, normal, t):
-    return tuple(point[i] + t*normal[i] for i in range(3))
 
 theta_case = math.radians(0)
 phi_vals = [math.radians(15)]
@@ -776,8 +779,14 @@ mdb.models['SuperEllipse'].ZsymmBC(name='BC-3', createStepName='Initial',
 ############ Mesh ############
 p1 = mdb.models['SuperEllipse'].parts['SuperEllipsoid']
 e1 = p1.edges
+c1 = p1.cells
+pickedCells = c1.getByBoundingBox(xMin=-1e6, xMax=1e6,
+                                yMin=-1e6, yMax=1e6,
+                                zMin=-1e6, zMax=1e6)
+elemType1 = mesh.ElemType(elemCode=C3D20R, elemLibrary=STANDARD)
+p1.setElementType(regions=(pickedCells,), elemTypes=(elemType1,))
 p1.seedPart(size=mesh_size, deviationFactor=0.1, minSizeFactor=0.01)
 pt = superellipsoid_point_3d(0.0, 0.0, a + thick/2, b + thick/2, c + thick/2, n1, n2)
 pickedEdges = e1.findAt((pt, ))
-p.seedEdgeByNumber(edges=pickedEdges, number=4, constraint=FINER)
+p1.seedEdgeByNumber(edges=pickedEdges, number=4, constraint=FINER)    
 p1.generateMesh()

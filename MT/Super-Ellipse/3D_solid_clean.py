@@ -23,18 +23,14 @@ model.rootAssembly.clearGeometryCache()
 model.rootAssembly.regenerate()
 
 ################ Parameters #####################
-a, b, c = 450.0, 100.0, 500.0   # inner semi-axes
+a, b, c = 100.0, 100.0, 500.0   # inner semi-axes
 total_length = c
-thick = 5.0                     # total thickness
 n1, n2 = 0.5, 0.5               # shape exponents
 num_points = 30                 # points per curve
 num_layers = 1                  # number of layers through thickness
 num_theta_sections = 25          # number of θ sections(min 2): For even number, the number of partitions created will be (num_theta_sections + 1)
 num_partitions = 4              # number of partitions for face BC
-pressure_value = 12            # pressure magnitude (MPa)
-mesh_size = 2.0                 # mesh size
-
-a_out, b_out, c_out = a + thick, b + thick, c + thick  # outer semi-axes
+mesh_size = 4.0                 # mesh size
 
 ################ Helper Functions #####################
 def signed_power(base, exp):
@@ -84,10 +80,26 @@ def compute_theta_sections(num_theta_sections, n2, alpha=1.0, round_output=None)
         return [round(t, round_output) for t in thetas]
     return thetas
 
-def create_layer_part(model, layer_index, num_theta_sections):
+def superellipsoid_normal(phi, theta, a, b, c, n1, n2):
+    """Analytical unit normal vector on superellipsoid surface."""
+    cphi, sphi = math.cos(phi), math.sin(phi)
+    ctheta, stheta = math.cos(theta), math.sin(theta)
+    # Use your signed_power(base, exp)
+    nx = (1.0 / a) * signed_power(cphi, 2 - n1) * signed_power(ctheta, 2 - n2)
+    ny = (1.0 / b) * signed_power(cphi, 2 - n1) * signed_power(stheta, 2 - n2)
+    nz = (1.0 / c) * signed_power(sphi, 2 - n1)
+    # Normalize
+    norm = math.sqrt(nx**2 + ny**2 + nz**2)
+    return (nx / norm, ny / norm, nz / norm)
+
+def offset_point_along_normal(point, normal, t):
+    return tuple(point[i] + t*normal[i] for i in range(3))
+
+def create_layer_part(model, layer_index, num_theta_sections, thick):
     # Layer fraction and scaling
     frac1 = float(layer_index) / num_layers
     frac2 = float(layer_index + 1) / num_layers
+    a_out, b_out, c_out = a + thick, b + thick, c + thick  # outer semi-axes
     # Semi-axes for inner and outer surfaces of this layer
     a_i, b_i, c_i = a + frac1*(a_out - a), b + frac1*(b_out - b), c + frac1*(c_out - c)
     a_o, b_o, c_o = a + frac2*(a_out - a), b + frac2*(b_out - b), c + frac2*(c_out - c)
@@ -265,10 +277,11 @@ def create_layer_part(model, layer_index, num_theta_sections):
     )
     return p
 
-def create_layer_part_wo_45(model, layer_index, num_theta_sections):
+def create_layer_part_wo_45(model, layer_index, num_theta_sections, thick):
     # --- Layer fraction and scaling ---
     frac1 = float(layer_index) / num_layers
     frac2 = float(layer_index + 1) / num_layers
+    a_out, b_out, c_out = a + thick, b + thick, c + thick  # outer semi-axes
     # Semi-axes for inner and outer surfaces of this layer
     a_i, b_i, c_i = a + frac1*(a_out - a), b + frac1*(b_out - b), c + frac1*(c_out - c)
     a_o, b_o, c_o = a + frac2*(a_out - a), b + frac2*(b_out - b), c + frac2*(c_out - c)
@@ -360,11 +373,6 @@ def create_layer_part_wo_45(model, layer_index, num_theta_sections):
     create_wire_splines(p, inner_case1)
     create_datums(p, outer_case1)
     create_wire_splines(p, outer_case1)
-    # --- Case 2 (phi=45°) wires ---
-    '''create_datums(p, inner_case2)
-    create_wire_splines(p, inner_case2)
-    create_datums(p, outer_case2)
-    create_wire_splines(p, outer_case2)'''
     # --- Remove extra wires ---
     center = (0.0, 0.0, c_o)
     radius = 0.5
@@ -427,23 +435,6 @@ def create_layer_part_wo_45(model, layer_index, num_theta_sections):
     )
     return p
 
-model = mdb.models['SuperEllipse']
-use_wo_45 = False  # flag: once a layer fails with 45°
-for i in range(num_layers):
-    if use_wo_45:
-        print("Layer", i + 1, ": Using _wo_45 method due to previous failure.")
-        create_layer_part_wo_45(model, i, num_theta_sections)
-        continue
-    try:
-        create_layer_part(model, i, num_theta_sections)
-        print("Layer", i + 1, ": Created successfully with 45° path.")
-    except Exception as e:
-        print("Reason:", e)
-        create_layer_part_wo_45(model, i, num_theta_sections)
-        use_wo_45 = True  # from now on, always use _wo_45
-
-############ Create SuperEllipsoid by merging layers ############
-
 def assemble_and_merge_layers(num_layers):
     assembly = model.rootAssembly
     assembly.DatumCsysByDefault(CARTESIAN)
@@ -467,204 +458,364 @@ def assemble_and_merge_layers(num_layers):
         mdb.models['SuperEllipse'].parts.changeKey(fromName='Layer_1',toName='SuperEllipsoid')
         mdb.models['SuperEllipse'].rootAssembly.features.changeKey(fromName='Layer_1-1', toName='SuperEllipsoid-1')
 
-assemble_and_merge_layers(num_layers)
 
-############ Material properties ############
-model.Material(name='Aluminium')
-model.materials['Aluminium'].Elastic(table=((70000.0,0.34), ))
+############ Create layers ############
+pressure_targets = [
+    (0.312, 143.0),
+    (0.416, 252.0)
+]
 
-############ Section assignment ############
-model.HomogeneousSolidSection(name='AL_section', 
-    material='Aluminium', thickness=None)
-p = mdb.models['SuperEllipse'].parts['SuperEllipsoid']
+results = []
 
-current_cells = p.cells.getByBoundingBox(
-        xMin=-1e6, xMax=1e6,
-        yMin=-1e6, yMax=1e6,
-        zMin=-1e6, zMax=1e6
-)
-region = regionToolset.Region(cells=current_cells)
-p.SectionAssignment(region=region, sectionName='AL_section', offset=0.0, 
-    offsetType=MIDDLE_SURFACE, offsetField='', 
-    thicknessAssignment=FROM_SECTION)
-mdb.models['SuperEllipse'].parts['SuperEllipsoid'].setValues(
-    geometryRefinement=FINE)
-
-############ Step ############
-model.StaticStep(name='LoadingStep', previous='Initial', 
-    initialInc=1, minInc=1e-05, maxInc=1.0)
-
-############ Load ############
-a1 = mdb.models['SuperEllipse'].rootAssembly
-sf = a1.instances['SuperEllipsoid-1'].faces
-
-phi = math.radians(45.0)
-theta = math.radians(45.0)
-
-pt = superellipsoid_point_3d(phi, theta, a, b, c, n1, n2)
-
-search_tol = 0.3
-closest = sf.getClosest(coordinates=(pt,), searchTolerance=search_tol)
-
-if not closest:
-    raise RuntimeError("No nearest face found. Increase search_tol.")
-
-proj_pt = closest[0][1]
-face_array = sf.findAt((proj_pt,))
-region = regionToolset.Region(side1Faces=face_array)
-
-model.Pressure(
-    name='Pressure_load',
-    createStepName='LoadingStep',
-    region=region,
-    magnitude=pressure_value
-)
-
-############ BC ############
-a_m = a + thick/2.0
-b_m = b + thick/2.0
-c_m = c + thick/2.0
-
-search_tol = 0.3
-def face_at(phi_deg, theta_deg):
-    phi = math.radians(phi_deg)
-    theta = math.radians(theta_deg)
-    pt = superellipsoid_point_3d(phi, theta, a_m, b_m, c_m, n1, n2)
-    closest = sf.getClosest(coordinates=(pt,), searchTolerance=search_tol)
-    if not closest:
-        raise RuntimeError("No face found")
-    proj = closest[0][1]
-    face_array = sf.findAt((proj,))
-    return face_array
-
-regionX = regionToolset.Region(faces=face_at(45, 90))
-model.XsymmBC(name='BC-X', createStepName='Initial', region=regionX)
-
-regionY = regionToolset.Region(faces=face_at(45, 0))
-model.YsymmBC(name='BC-Y', createStepName='Initial', region=regionY)
-
-regionZ = regionToolset.Region(faces=face_at(0, 45))
-model.ZsymmBC(name='BC-Z', createStepName='Initial', region=regionZ)
-
-############ Partitioning ############
-
-#### Strat - 4 ####
-def superellipsoid_normal(phi, theta, a, b, c, n1, n2):
-    """Analytical unit normal vector on superellipsoid surface."""
-    cphi, sphi = math.cos(phi), math.sin(phi)
-    ctheta, stheta = math.cos(theta), math.sin(theta)
-    # Use your signed_power(base, exp)
-    nx = (1.0 / a) * signed_power(cphi, 2 - n1) * signed_power(ctheta, 2 - n2)
-    ny = (1.0 / b) * signed_power(cphi, 2 - n1) * signed_power(stheta, 2 - n2)
-    nz = (1.0 / c) * signed_power(sphi, 2 - n1)
-    # Normalize
-    norm = math.sqrt(nx**2 + ny**2 + nz**2)
-    return (nx / norm, ny / norm, nz / norm)
-
-def offset_point_along_normal(point, normal, t):
-    return tuple(point[i] + t*normal[i] for i in range(3))
-
-theta_case = math.radians(0)
-phi_vals = [math.radians(15)]
-
-for phi_example in phi_vals:
-    # Compute inner and outer points on superellipsoid surface
-    pt_inner = superellipsoid_point_3d(phi_example, theta_case, a, b, c, n1, n2)
-    n_vec = superellipsoid_normal(phi_example, theta_case, a, b, c, n1, n2)
-    theta_out = math.radians(90)
-    pt_outer = superellipsoid_point_3d(phi_example, theta_out, a, b, c, n1, n2)
-    pt_inner_offset = offset_point_along_normal(pt_inner, n_vec, 1e-3)
-    # Create datum points and plane for partition
-    datum_inner = p.DatumPointByCoordinate(coords=pt_inner)
-    datum_outer = p.DatumPointByCoordinate(coords=pt_inner_offset)
-    datum_xy = p.DatumPointByCoordinate(coords=pt_outer)
-    plane_datum = p.DatumPlaneByThreePoints(
-        point1=p.datums[datum_inner.id],
-        point2=p.datums[datum_outer.id],
-        point3=p.datums[datum_xy.id]
-    )  
-    cell_to_partition = p.cells.getByBoundingBox(
-        xMin=-1e6, xMax=1e6,
-        yMin=-1e6, yMax=1e6,
-        zMin=-1e6, zMax=1e6
-    )  
-    p.PartitionCellByDatumPlane(
-        cells=cell_to_partition,
-        datumPlane=p.datums[plane_datum.id]
-    )
-
-# ---- Partition for face ----#
-
-phi_min = math.radians(15)
-phi_max = math.radians(90)
-phi_step = (phi_max - phi_min) / (num_partitions + 1)
-phi_face = [phi_min + i * phi_step for i in range(1, num_partitions + 1)]
-
-# --- Access model and geometry ---
-p = mdb.models['SuperEllipse'].parts['SuperEllipsoid']  # part
-pf = p.faces      
-layer_thickness = float(thick / num_layers)
-theta_spl = [math.radians(0), math.radians(90)]
-# --- Loop through φ partitions ---
-for theta_case in theta_spl:
-    for phi_example in phi_face:
-        # Create one datum plane per φ
-        a_i = a  # use base geometry for datum construction
-        b_i = b
-        c_i = c
-        # Reference point and its normal
-        pt_inner = superellipsoid_point_3d(phi_example, theta_case, a_i, b_i, c_i, n1, n2)
-        n_vec = superellipsoid_normal(phi_example, theta_case, a_i, b_i, c_i, n1, n2)
-        pt_inner_offset = offset_point_along_normal(pt_inner, n_vec, 1e-3)
-        if theta_case == math.radians(0):
-            pt_xy = superellipsoid_point_3d(phi_example, math.radians(90), a_i, b_i, c_i, n1, n2)
-        else:   
-            pt_xy = superellipsoid_point_3d(phi_example, math.radians(0), a_i, b_i, c_i, n1, n2)
-        # Create datum plane once
-        datum_inner = p.DatumPointByCoordinate(coords=pt_inner)
-        datum_outer = p.DatumPointByCoordinate(coords=pt_inner_offset)
-        datum_xy = p.DatumPointByCoordinate(coords=pt_xy)
-        plane_datum = p.DatumPlaneByThreePoints(
-            point1=p.datums[datum_inner.id],
-            point2=p.datums[datum_outer.id],
-            point3=p.datums[datum_xy.id]
+for pressure_value, target_vm in pressure_targets:
+    thick = 4.0   # start thickness at 4 mm
+    step_coarse = 1.0
+    prev_thick = None
+    in_bisection = False
+    low = high = None
+    while True:
+        print("\n====================================")
+        print("Running thickness = %.3f mm at pressure = %.3f MPa" % (thick, pressure_value))
+        print("Target von Mises = %.1f MPa" % target_vm)
+        print("====================================\n")
+        # ---- Start fresh model for each run ----
+        try:
+            del mdb.models['SuperEllipse']
+        except:
+            pass
+        mdb.Model(name='SuperEllipse')
+        model = mdb.models['SuperEllipse']
+        use_wo_45 = False  # flag: once a layer fails with 45°
+        for i in range(num_layers):
+            if use_wo_45:
+                print("Layer", i + 1, ": Using _wo_45 method due to previous failure.")
+                create_layer_part_wo_45(model, i, num_theta_sections, thick)
+                continue
+            try:
+                create_layer_part(model, i, num_theta_sections, thick)
+                print("Layer", i + 1, ": Created successfully with 45° path.")
+            except Exception as e:
+                print("Reason:", e)
+                create_layer_part_wo_45(model, i, num_theta_sections, thick)
+                use_wo_45 = True  # from now on, always use _wo_45
+        ############ Create SuperEllipsoid by merging layers ############
+        assemble_and_merge_layers(num_layers)
+        ############ Material properties ############
+        model.Material(name='Aluminium')
+        model.materials['Aluminium'].Elastic(table=((70000.0,0.34), ))
+        ############ Section assignment ############
+        model.HomogeneousSolidSection(name='AL_section', 
+            material='Aluminium', thickness=None)
+        p = mdb.models['SuperEllipse'].parts['SuperEllipsoid']
+        current_cells = p.cells.getByBoundingBox(
+                xMin=-1e6, xMax=1e6,
+                yMin=-1e6, yMax=1e6,
+                zMin=-1e6, zMax=1e6
         )
-        # --- Collect all faces across layers for this φ ---
-        all_faces = []
+        region = regionToolset.Region(cells=current_cells)
+        p.SectionAssignment(region=region, sectionName='AL_section', offset=0.0, 
+            offsetType=MIDDLE_SURFACE, offsetField='', 
+            thicknessAssignment=FROM_SECTION)
+        mdb.models['SuperEllipse'].parts['SuperEllipsoid'].setValues(
+            geometryRefinement=FINE)
+        ############ Partitioning ############
+        #### Strat - 4 ####
+        theta_case = math.radians(0)
+        phi_vals = [math.radians(15)]
+        for phi_example in phi_vals:
+            # Compute inner and outer points on superellipsoid surface
+            pt_inner = superellipsoid_point_3d(phi_example, theta_case, a, b, c, n1, n2)
+            n_vec = superellipsoid_normal(phi_example, theta_case, a, b, c, n1, n2)
+            theta_out = math.radians(90)
+            pt_outer = superellipsoid_point_3d(phi_example, theta_out, a, b, c, n1, n2)
+            pt_inner_offset = offset_point_along_normal(pt_inner, n_vec, 1e-3)
+            # Create datum points and plane for partition
+            datum_inner = p.DatumPointByCoordinate(coords=pt_inner)
+            datum_outer = p.DatumPointByCoordinate(coords=pt_inner_offset)
+            datum_xy = p.DatumPointByCoordinate(coords=pt_outer)
+            plane_datum = p.DatumPlaneByThreePoints(
+                point1=p.datums[datum_inner.id],
+                point2=p.datums[datum_outer.id],
+                point3=p.datums[datum_xy.id]
+            )  
+            cell_to_partition = p.cells.getByBoundingBox(
+                xMin=-1e6, xMax=1e6,
+                yMin=-1e6, yMax=1e6,
+                zMin=-1e6, zMax=1e6
+            )  
+            p.PartitionCellByDatumPlane(
+                cells=cell_to_partition,
+                datumPlane=p.datums[plane_datum.id]
+            )
+        # ---- Partition for face ----#
+        phi_min = math.radians(15)
+        phi_max = math.radians(90)
+        phi_step = (phi_max - phi_min) / (num_partitions + 1)
+        phi_face = [phi_min + i * phi_step for i in range(1, num_partitions + 1)]
+        # --- Access model and geometry ---
+        p = mdb.models['SuperEllipse'].parts['SuperEllipsoid']  # part
+        pf = p.faces      
+        layer_thickness = float(thick / num_layers)
+        theta_spl = [math.radians(0), math.radians(90)]
+        # --- Loop through φ partitions ---
+        for theta_case in theta_spl:
+            for phi_example in phi_face:
+                # Create one datum plane per φ
+                a_i = a  # use base geometry for datum construction
+                b_i = b
+                c_i = c
+                # Reference point and its normal
+                pt_inner = superellipsoid_point_3d(phi_example, theta_case, a_i, b_i, c_i, n1, n2)
+                n_vec = superellipsoid_normal(phi_example, theta_case, a_i, b_i, c_i, n1, n2)
+                pt_inner_offset = offset_point_along_normal(pt_inner, n_vec, 1e-3)
+                if theta_case == math.radians(0):
+                    pt_xy = superellipsoid_point_3d(phi_example, math.radians(90), a_i, b_i, c_i, n1, n2)
+                else:   
+                    pt_xy = superellipsoid_point_3d(phi_example, math.radians(0), a_i, b_i, c_i, n1, n2)
+                # Create datum plane once
+                datum_inner = p.DatumPointByCoordinate(coords=pt_inner)
+                datum_outer = p.DatumPointByCoordinate(coords=pt_inner_offset)
+                datum_xy = p.DatumPointByCoordinate(coords=pt_xy)
+                plane_datum = p.DatumPlaneByThreePoints(
+                    point1=p.datums[datum_inner.id],
+                    point2=p.datums[datum_outer.id],
+                    point3=p.datums[datum_xy.id]
+                )
+                # --- Collect all faces across layers for this φ ---
+                all_faces = []
+                for layer_index in range(1, num_layers + 1):
+                    frac = float(layer_thickness / 2)
+                    a_i = a + frac + (layer_index - 1) * layer_thickness
+                    b_i = b + frac + (layer_index - 1) * layer_thickness
+                    c_i = c + frac + (layer_index - 1) * layer_thickness
+                    # midpoint between φ partitions
+                    phi_mid = phi_example - (phi_step / 2.0)
+                    if phi_mid < phi_min:
+                        phi_mid = phi_min + (phi_step / 2.0)
+                    # point on superellipsoid surface
+                    face_pt = superellipsoid_point_3d(phi_mid, theta_case, a_i, b_i, c_i, n1, n2)
+                    try:
+                        closest = pf.getClosest((tuple(face_pt),))
+                        if closest:
+                            closest_face = closest[0][0]
+                            closest_point = closest[0][1]
+                            face_ref = pf.findAt((tuple(closest_point),))
+                            if face_ref:
+                                all_faces.append(face_ref[0])
+                    except Exception as e:
+                        print("  Skipped layer", layer_index, ":", str(e))
+                if all_faces:
+                    p.PartitionFaceByDatumPlane(
+                        faces=tuple(all_faces),
+                        datumPlane=p.datums[plane_datum.id]
+                    )
+                else:
+                    print("No faces found for φ =", round(math.degrees(phi_example), 2))
+        ############ Step ############
+        model.StaticStep(name='LoadingStep', previous='Initial', 
+            initialInc=1, minInc=1e-05, maxInc=1.0)
+        mdb.models['SuperEllipse'].fieldOutputRequests['F-Output-1'].setValues(
+        variables=('S', 'MISES', 'PE', 'PEEQ', 'PEMAG', 'LE', 'U', 'RF', 'CF', 
+        'CSTRESS', 'CDISP'))
+        ############ Create Surface ############
+        ### Strat - 1 ###
+        phi_surf = []
+        for i in range(0, len(phi_vals)):
+            phi_surf.append(phi_vals[i] - math.radians(10))
+        ph_o = math.radians(90)
+        if n2 and n1 >= 1.0:
+            x = math.radians(1)
+        else:
+            x = math.radians(0.01)
+        phi_surf.append(ph_o - x)
+        phi_surf_deg = [math.degrees(t) for t in phi_surf]
+        a1 = mdb.models['SuperEllipse'].rootAssembly
+        s1 = a1.instances['SuperEllipsoid-1'].faces
+        faces_combined = []
+        for i, phi_i in enumerate(phi_surf):
+            theta_i = math.radians(1)
+            pt = superellipsoid_point_3d(phi_i, theta_i, a, b, c, n1, n2)
+            found = None
+            search_tol = 0.1
+            max_tol = thick
+            while search_tol <= max_tol:
+                found = s1.getClosest(coordinates=(tuple(pt),), searchTolerance=search_tol)
+                if found:
+                    break
+                search_tol += 0.1
+            if found:
+                face_pt = found[0][1]
+                seq_face = s1.findAt((face_pt,),)
+                if seq_face:
+                    faces_combined.append(seq_face)
+        # --- Combine faces into one surface ---
+        if faces_combined:
+            a1.Surface(side1Faces=tuple(faces_combined), name='Surf_Load')
+        else:
+            print("No faces found for surface creation.")
+        ########### Create Set ############
+        layer_thickness = float(thick / num_layers)
+        for theta_val, set_suffix in zip([0.0, math.radians(90)], ['y', 'x']):
+            layer_face_points = []
+            for layer_index in range(1, num_layers + 1):
+                frac = float(layer_thickness / 2)
+                a_i = a + frac + (layer_index - 1) * layer_thickness
+                b_i = b + frac + (layer_index - 1) * layer_thickness
+                c_i = c + frac + (layer_index - 1) * layer_thickness
+                phi_boundaries = [0.0] + [math.radians(15)] + phi_face + [math.radians(90)]
+                phi_set = []
+                for j in range(len(phi_boundaries) - 1):
+                    mid_phi = 0.5 * (phi_boundaries[j] + phi_boundaries[j + 1])
+                    phi_set.append(mid_phi)
+                for phi_mid in phi_set:
+                    pt = superellipsoid_point_3d(phi_mid, theta_val, a_i, b_i, c_i, n1, n2)
+                    layer_face_points.append(pt)
+            layer_face_objs = []
+            for pt in layer_face_points:
+                found_face = None
+                search_tol = 0.1
+                max_tol = thick
+                while search_tol <= max_tol:
+                    try:
+                        closest = s1.getClosest((tuple(pt),), searchTolerance=search_tol)
+                        if closest:
+                            closest_point = closest[0][1]
+                            seq_face = s1.findAt((closest_point,),)
+                            if seq_face:
+                                found_face = seq_face
+                                break
+                    except:
+                        pass
+                    search_tol += 0.1
+                if found_face:
+                    layer_face_objs.append(found_face)
+            if layer_face_objs:
+                a1.Set(faces=tuple(layer_face_objs), name='Set-Layer-' + set_suffix)
+        layer_face_points_45 = []
+        theta_45 = math.radians(45)
+        phi_0 = 0.0
         for layer_index in range(1, num_layers + 1):
             frac = float(layer_thickness / 2)
             a_i = a + frac + (layer_index - 1) * layer_thickness
             b_i = b + frac + (layer_index - 1) * layer_thickness
             c_i = c + frac + (layer_index - 1) * layer_thickness
-            # midpoint between φ partitions
-            phi_mid = phi_example - (phi_step / 2.0)
-            if phi_mid < phi_min:
-                phi_mid = phi_min + (phi_step / 2.0)
-            # point on superellipsoid surface
-            face_pt = superellipsoid_point_3d(phi_mid, theta_case, a_i, b_i, c_i, n1, n2)
-            try:
-                closest = pf.getClosest((tuple(face_pt),))
-                if closest:
-                    closest_face = closest[0][0]
-                    closest_point = closest[0][1]
-                    face_ref = pf.findAt((tuple(closest_point),))
-                    if face_ref:
-                        all_faces.append(face_ref[0])
-            except Exception as e:
-                print("  Skipped layer", layer_index, ":", str(e))
-        if all_faces:
-            p.PartitionFaceByDatumPlane(
-                faces=tuple(all_faces),
-                datumPlane=p.datums[plane_datum.id]
-            )
+            pt = superellipsoid_point_3d(phi_0, theta_45, a_i, b_i, c_i, n1, n2)
+            layer_face_points_45.append(pt)
+        layer_face_objs_45 = []
+        for pt in layer_face_points_45:
+            found_face = None
+            search_tol = 0.1
+            max_tol = thick
+            while search_tol <= max_tol:
+                try:
+                    closest = s1.getClosest((tuple(pt),), searchTolerance=search_tol)
+                    if closest:
+                        closest_point = closest[0][1]
+                        seq_face = s1.findAt((closest_point,),)
+                        if seq_face:
+                            found_face = seq_face
+                            break
+                except:
+                    pass
+                search_tol += 0.1
+            if found_face:
+                layer_face_objs_45.append(found_face)
+        if layer_face_objs_45:
+            a1.Set(faces=tuple(layer_face_objs_45), name='Set-Layer-z')
         else:
-            print("No faces found for φ =", round(math.degrees(phi_example), 2))
+            print("No faces found for Set-Layer-z.")
+        ############ Load ############
+        model.Pressure(name='SurfLoad', createStepName='LoadingStep', 
+            region=a1.surfaces['Surf_Load'], magnitude=pressure_value)
+        ############ BC ############
+        region = a1.sets['Set-Layer-x']
+        mdb.models['SuperEllipse'].XsymmBC(name='BC-2', createStepName='Initial', 
+            region=region, localCsys=None)
+        region = a1.sets['Set-Layer-y']
+        mdb.models['SuperEllipse'].YsymmBC(name='BC-1', createStepName='Initial', 
+            region=region, localCsys=None)
+        region = a1.sets['Set-Layer-z']
+        mdb.models['SuperEllipse'].ZsymmBC(name='BC-3', createStepName='Initial', 
+            region=region, localCsys=None)
+        ############ Mesh ############
+        p1 = mdb.models['SuperEllipse'].parts['SuperEllipsoid']
+        e1 = p1.edges
+        c1 = p1.cells
+        pickedCells = c1.getByBoundingBox(xMin=-1e6, xMax=1e6,
+                                        yMin=-1e6, yMax=1e6,
+                                        zMin=-1e6, zMax=1e6)
+        elemType1 = mesh.ElemType(elemCode=C3D20R, elemLibrary=STANDARD)
+        p1.setElementType(regions=(pickedCells,), elemTypes=(elemType1,))
+        p1.seedPart(size=mesh_size, deviationFactor=0.1, minSizeFactor=0.01)
+        pt = superellipsoid_point_3d(0.0, 0.0, a + thick/2, b + thick/2, c + thick/2, n1, n2)
+        pickedEdges = e1.findAt((pt, ))
+        p1.seedEdgeByNumber(edges=pickedEdges, number=4, constraint=FINER)    
+        p1.generateMesh()
+        # ----- Run Job -----
+        job_name = "t" + str(int(thick*1000)) + "_p" + str(int(pressure_value*1000))
+        job = mdb.Job(name=job_name, model='SuperEllipse', description='', type=ANALYSIS, 
+                atTime=None, waitMinutes=0, waitHours=0, queue=None, memory=90, 
+                memoryUnits=PERCENTAGE, getMemoryFromAnalysis=True, 
+                explicitPrecision=SINGLE, nodalOutputPrecision=SINGLE, echoPrint=OFF, 
+                modelPrint=OFF, contactPrint=OFF, historyPrint=OFF, userSubroutine='', 
+                scratch='', resultsFormat=ODB, multiprocessingMode=DEFAULT, numCpus=4, 
+                numDomains=4, numGPUs=0)
+        job.submit()
+        job.waitForCompletion()
+        # ----- Read Max von Mises -----
+        odb = session.openOdb(job_name + '.odb')
+        step_frames = odb.steps['LoadingStep'].frames
+        vm_field = step_frames[-1].fieldOutputs['S'].getScalarField(invariant=MISES)
+        max_vm = max(v.data for v in vm_field.values)
+        odb.close()
+        print(" → Max von Mises = %.2f MPa" % max_vm)
+        results.append([thick, pressure_value, max_vm])
+        if not in_bisection:
+            print("Checking coarse step…")
+            if max_vm < target_vm:
+                # still safe → reduce thickness and continue
+                prev_thick = thick
+                thick = thick - step_coarse
+                print("  Below target → next thickness = %.3f mm" % thick)
+                if thick <= 0.5:
+                    print("Reached minimum thickness.")
+                    break
+                continue
+            # if we are here → we *just crossed* the target
+            print("Target crossed. Starting bisection.")
+            in_bisection = True
+            # If this is the first time crossing, we do NOT have a safe thickness yet
+            if prev_thick is None:
+                print("  Crossed on first step → cannot bisection. Stopping here.")
+                break
+            low = thick       # too thin → too much stress
+            high = prev_thick # thicker → lower stress
+            thick = 0.5 * (low + high)
+            print("  Next (midpoint) thickness = %.3f mm" % thick)
+            continue
+        # ----------------------------------------------------
+        # 2) If already in bisection → refine
+        # ----------------------------------------------------
+        print("Checking bisection…")
+        if max_vm > target_vm:
+            low = thick   # still too thin → increase thickness
+        else:
+            high = thick  # too thick → decrease thickness
+        if abs(high - low) < 0.05:
+            thick = 0.5 * (low + high)
+            print("✅ Converged thickness: %.3f mm" % thick)
+            break
+        thick = 0.5 * (low + high)
+        print("  Next midpoint thickness = %.3f mm" % thick)
+        continue
 
-############ Mesh ############
-p1 = mdb.models['SuperEllipse'].parts['SuperEllipsoid']
-e1 = p1.edges
-p1.seedPart(size=mesh_size, deviationFactor=0.1, minSizeFactor=0.01)
-pt = superellipsoid_point_3d(0.0, 0.0, a + thick/2, b + thick/2, c + thick/2, n1, n2)
-pickedEdges = e1.findAt((pt, ))
-p.seedEdgeByNumber(edges=pickedEdges, number=4, constraint=FINER)
-p1.generateMesh()
+print("\nFinal Results:")
+for r in results:
+    print("thickness=%.2f mm, pressure=%.3f MPa → von Mises=%.2f MPa" % tuple(r))
+
+with open("thickness_pressure_results.csv", "wb") as f:
+    w = csv.writer(f)
+    w.writerow(["thickness_mm","pressure_MPa","max_vm_MPa"])
+    w.writerows(results)
+
+print("\nSaved to thickness_pressure_results.csv")
