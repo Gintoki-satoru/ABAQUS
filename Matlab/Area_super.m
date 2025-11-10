@@ -41,16 +41,16 @@ fprintf('Surface Area = %.6f (square units)\n', A1);
 
 %%
 % Super-ellipsoid parameters
-a = 110;    % semi-axis (m) or (mm, be consistent)
-b = 110;
-c = 510;
+a = 105;    % semi-axis (m) or (mm, be consistent)
+b = 105;
+c = 505;
 n1 = 0.5;
 n2 = 0.5;
 
 % Parameter grid resolution (increase for accuracy)
 N = 5250;
-phi = linspace(0, pi/2, N);
-theta = linspace(0, pi/2, N);
+phi = linspace(-pi/2, pi/2, N);
+theta = linspace(-pi, pi, N);
 [PHI, THETA] = meshgrid(phi, theta);
 
 % Helper: signed power function
@@ -80,6 +80,6 @@ dtheta = theta(2)-theta(1);
 A2 = sum(dA(:)) * dphi * dtheta;
 
 fprintf('Surface Area = %.6f (square units)\n', A2);
-
-Alm = (A2 - A1)/(log(A2/A1))
-Agm = sqrt(A2*A1)
+% 
+% Alm = (A2 - A1)/(log(A2/A1))
+% Agm = sqrt(A2*A1)

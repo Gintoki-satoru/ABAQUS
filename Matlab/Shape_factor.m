@@ -1,45 +1,59 @@
-% Super-ellipsoid parameters
-a = 100;    % semi-axis (m) or (mm, be consistent)
-b = 100;
-c = 500;
-n1 = 4;
-n2 = 4;
+a = 105;
+b = 105;
+c = 105;
+n1 = 1;
+n2 = 1;
+thick = 5;
+V_inner = superellipsoid_volume(a, b, c, n1, n2);
 
-t = 10;  % thickness (same units as a,b,c)
-k = 150;    % thermal conductivity (W/m·K or W/mm·K consistently!)
+V_outer = superellipsoid_volume(a+thick, b+thick, c+thick, n1, n2);
 
-% Create grid
-N = 200; % resolution (increase for accuracy)
-phi = linspace(0, pi/2, N);
-theta = linspace(0, pi/2, N);
+V_material = V_outer - V_inner;
+fprintf('Superellipsoid Volume = %.3f mm^3\n', V_material);
+
+% Parameter grid resolution
+N = 5000;
+phi = linspace(-pi/2, pi/2, N);
+theta = linspace(-pi, pi, N);
 [PHI, THETA] = meshgrid(phi, theta);
 
-% Helper sign power function
+% Helper: signed power function
 spow = @(x,p) sign(x).*abs(x).^p;
 
-% Parametric surface
-X = a * spow(cos(PHI), 2/n1) .* spow(cos(THETA), 2/n2);
-Y = b * spow(cos(PHI), 2/n1) .* spow(sin(THETA), 2/n2);
-Z = c * spow(sin(PHI), 2/n1);
+% Parametric coordinates of surface
+X = a * spow(cos(PHI), n1) .* spow(cos(THETA), n2);
+Y = b * spow(cos(PHI), n1) .* spow(sin(THETA), n2);
+Z = c * spow(sin(PHI), n1);
 
-% Compute partial derivatives numerically
+% Partial derivatives (numerical)
 [dX_dphi, dX_dtheta] = gradient(X, phi, theta);
 [dY_dphi, dY_dtheta] = gradient(Y, phi, theta);
 [dZ_dphi, dZ_dtheta] = gradient(Z, phi, theta);
 
-% r_phi and r_theta vectors
-r_phi = cat(3, dX_dphi, dY_dphi, dZ_dphi);
+% Tangent vectors
+r_phi   = cat(3, dX_dphi,   dY_dphi,   dZ_dphi);
 r_theta = cat(3, dX_dtheta, dY_dtheta, dZ_dtheta);
 
-% Cross product magnitude = local area density
-crossprod = cross(r_phi, r_theta, 3);
-dA = sqrt(sum(crossprod.^2, 3));
+% Local area element = |r_phi x r_theta|
+cross_prod = cross(r_phi, r_theta, 3);
+dA = sqrt(sum(cross_prod.^2, 3));
 
-% Numerical integration
-S = sum(dA(:)) * ( (phi(2)-phi(1)) * (theta(2)-theta(1)) ) / t;
+% Integrate over parameter domain
+dphi = phi(2)-phi(1);
+dtheta = theta(2)-theta(1);
+A = sum(dA(:)) * dphi * dtheta;
 
-% Thermal resistance
-R = 1 / (k * S);
+fprintf('Surface Area = %.6f (square units)\n', A);
 
-fprintf('Shape factor S = %.6g\n', S);
-fprintf('Thermal resistance R = %.6g\n', R);
+S_inf = 3.51*sqrt(A);
+S_0 = A/thick;
+ls = thick;
+expr = 1.26 - (2 - sqrt(A)/ls) / (9*sqrt(1 - 4.79*(V_material)^(2/3)/A));
+n = max(expr, 1.0);
+
+function V = superellipsoid_volume(a, b, c, n1, n2)
+    e1 =2/n1;
+    e2 =2/n2;
+    V = 8 * a * b * c * (gamma(1 + 1/e1)^2 * gamma(1 + 1/e2)) / ...
+        (gamma(1 + 2/e1) * gamma(1 + (1/e2 + 2/e1)));
+end

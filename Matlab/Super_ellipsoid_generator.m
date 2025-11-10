@@ -1,10 +1,10 @@
 % Super-ellipsoid parameters
-a = 3;  % semi-axis along x
-b = 3;  % semi-axis along y
-c = 2;  % semi-axis along z
+a = 450;  % semi-axis along x
+b = 100;  % semi-axis along y
+c = 500;  % semi-axis along z
 
-epsilon1 = 1;  % controls roundness in x-y plane
-epsilon2 = 1;  % controls roundness in vertical direction
+epsilon1 = 0.5;  % controls roundness in x-y plane
+epsilon2 = 0.5;  % controls roundness in vertical direction
 
 signed_power = @(base, exp) sign(base) .* (abs(base).^exp);
 
@@ -18,9 +18,9 @@ z = c * signed_power(sin(v), epsilon2);
 
 % Plot
 figure;
-surf(x, y, z, 'FaceColor', 'magenta', 'EdgeColor', 'none');
+surf(z, x, y, 'FaceColor', 'texturemap', 'EdgeColor', 'texturemap');
 axis equal;
-xlabel('X'); ylabel('Y'); zlabel('Z');
+xlabel('Z'); ylabel('X'); zlabel('Y');
 title('Super-Ellipsoid');
 grid on;
 camlight; lighting gouraud;
