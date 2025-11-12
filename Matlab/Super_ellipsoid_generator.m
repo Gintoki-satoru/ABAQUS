@@ -1,10 +1,12 @@
 % Super-ellipsoid parameters
-a = 450;  % semi-axis along x
-b = 100;  % semi-axis along y
-c = 500;  % semi-axis along z
-
-epsilon1 = 0.5;  % controls roundness in x-y plane
-epsilon2 = 0.5;  % controls roundness in vertical direction
+ a = 0.5761
+ b = 0.5761
+ c = 2.8806
+n1 = 0.5;
+n2 = 0.5;
+thick = 0.00402;
+epsilon1 = 0.5;
+epsilon2 = 0.5;
 
 signed_power = @(base, exp) sign(base) .* (abs(base).^exp);
 
