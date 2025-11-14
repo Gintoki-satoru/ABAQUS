@@ -1,25 +1,28 @@
 % Known temps
-T_air = 293;    % K
+T_air = 300;    % K
 T_LH2 = 20;     % K
 
 % Outer film
-A  = 809702.77;           % mm^2
+A  = 20298000;           % mm^2
 hc = 10;                  % W/m^2K
 hc_mm = hc/1e6;           % W/mm^2K
 R2 = 1/(A * hc_mm);       % K/W
 
 % Insulation
-k_eff_mW = 0.3639;        % mW/mK
+k_eff_mW = 0.0303;        % mW/mK
 k_eff = k_eff_mW * 1e-6;  % W/mmK
-S_ins = 147369.65;        % mm
+S_ins = 1.434948139439459e+06;        % mm
 G1 = k_eff * S_ins;       % W/K
-R1 = 1 / G1;              % K/W
+% R1 = 1 / G1;              % K/W
+R1 = 23.7;
 
 % Liner
+A_outer = 19598000;
 k_al = 0.0306;            % W/mmK
 S_liner = 138749.34;      % mm
 G_liner = k_al * S_liner; % W/K
-Rliner = 1 / G_liner;     % K/W
+% Rliner = 1 / G_liner;     % K/W
+Rliner = 5.4*1e-6;
 
 % Unknowns vector: x = [Q; T2; T1]
 Aeq = [ R2,     1,    0;    % R2*Q + T2           = T_air
@@ -36,6 +39,9 @@ Q_LH2 = 1.13 * Q * 1.3;
 T2_LH2 = T_air - Q_LH2*R2;
 T1p_LH2 = 20 + Q_LH2*Rliner;
 
+h_eq = Q_LH2/((T_air - T_LH2)*A_outer);
+
 fprintf('Q   = %.6f W\n', Q_LH2);
 fprintf('T2  = %.6f K (outer tank - inner wall)\n', T2_LH2);
 fprintf('T1 = %.6f K (liner outer surface)\n', T1p_LH2);
+fprintf('h_{eq}   = %.6f W/mm^2K\n', h_eq);

@@ -32,7 +32,7 @@ import odbAccess
 import displayGroupOdbToolset as dgot
 import displayGroupMdbToolset as dgmt
 
-path_modules = 'C:\\Users\\psachdeva\\Documents\\01_Promotion\\01_ANA_2.1\\FE'
+path_modules = 'D:\\psingh\\MT\\ABAQUS\\MT\\Macros'
 os.chdir(path_modules)
 
 # Further packages:
@@ -869,10 +869,10 @@ modelName = '0_90_S_R4_L4h_M1_AO90_AE45_CFK'
 
 # Modellparameter:
 # Schichtwinkel der einzelnen physikalischen Schichten:
-plyAngle = [0,90,90,0]
+plyAngle = [0,90]
 
 # Definition des Pfades zur Sicherung der gesamten FE-Analyse: 
-analysis_Path = 'C:\\Users\\psachdeva\\Documents\\01_Promotion\\01_ANA_2.1\\FE\\vessel_3D'
+analysis_Path = 'D:\\psingh\\MT\\Fe'
 
 # Bestimmung des Zeitpunktes der FE-Analyse:
 analysis_currentDateTime = dt.datetime.now().strftime("%Y_%m_%d_%H_%M_%S")
@@ -940,7 +940,7 @@ alpha2024 = 23.1e-6
 beta2024 = 0.0
 
 # Betrag des angreifenden Momentenflusses:
-bendingMoment = 1.0
+bendingMoment = 0.0
 if bendingMoment != 0.0:
 	boolBendingMoment = True
 else:
@@ -975,7 +975,7 @@ else:
 	boolCylindricalPressure = False
 
 # Temperaturdifferenz:
-tempDif = 0.0
+tempDif = 20.0
 if tempDif != 0.0:
 	boolTempDif = True
 else:
@@ -1305,7 +1305,7 @@ def sectionCurvedComposite():
 sectionCurvedComposite()
 #---------------------------------------------------------------
 # Vernetzung in radialer Richtung:
-mR,mT,mZ = 1,10,10
+mR,mT,mZ = 5,50,10
 mRRatio,mTRatio,mZRatio = 1,1,1
 def meshCurvedCompositeGlobal():
 	for ii in range(len(rFacesAll)):
@@ -1523,7 +1523,7 @@ compositeModel.fieldOutputRequests['F-Output-1'].setValues(variables=('S', 'U', 
 # Erstellen des Jobs:
 jobName = modelName + '_Job'
 mdb.Job(name=jobName, model=modelName,
-		description='Run FE-analysis', parallelizationMethodExplicit=DOMAIN, numDomains=12, numCpus=6, memory=85,echoPrint=OFF, modelPrint=OFF, contactPrint=OFF, historyPrint=OFF)
+		description='Run FE-analysis', parallelizationMethodExplicit=DOMAIN, numDomains=12, numCpus=12, memory=85,echoPrint=OFF, modelPrint=OFF, contactPrint=OFF, historyPrint=OFF)
 
 # Job starten:
 mdb.jobs[jobName].submit(consistencyChecking=OFF)

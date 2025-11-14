@@ -36,7 +36,7 @@ import connectorBehavior
 import numpy as np
 import math
 
-path_modules = 'C:\\Users\\ps25kuhi\\Documents\\01_Promotion\\01_ANA_2.1\\FE'
+path_modules = 'D:\\psingh\\MT\\Fe'
 
 os.chdir(path_modules)
 
@@ -153,7 +153,7 @@ class CoordinateTransformation:
 # Create ct module instance for compatibility with existing code
 ct = CoordinateTransformation()
 
-analysis_Path = 'C:\\Users\\ps25kuhi\\Documents\\01_Promotion\\01_ANA_2.1\\FE\\pressure_axisymmetric_monoclinic'
+analysis_Path = 'D:\\psingh\\MT\\Fe'
 
 session.journalOptions.setValues(replayGeometry=COORDINATE, recoverGeometry=COORDINATE)
 
@@ -191,7 +191,7 @@ ltan=300
 length=2
 
 compositeMaterialName = 'cfk'  # 'cfk', 'cfkDuro', 'cfk'
-AngleName = 'Thick'  # 'bestSymm', 'bestUnsymm', 'Vergleichslaminat', 'Test'
+AngleName = 'bestSymm'  # 'bestSymm', 'bestUnsymm', 'Vergleichslaminat', 'Test'
 
 if compositeMaterialName == 'cfk':
 	if AngleName == 'Test':
@@ -199,7 +199,7 @@ if compositeMaterialName == 'cfk':
 	elif AngleName == 'Thick':
 		ric_plyAngle = '45 -45 -45 45 30 -30 -30 30 60 -60 -60 60 75 -75 -75 75 15 -15 -15 15 90 90 90 90'.split()
 	elif AngleName == 'bestSymm':
-		ric_plyAngle = '00010110111010111011011101011101101000'  
+		ric_plyAngle = '0'  #00010110111010111011011101011101101000
 	elif AngleName == 'onlyB':
 		ric_plyAngle = '00011011011011011011011011011011011000'  
 	elif AngleName == 'bestUnsymm':
@@ -247,7 +247,8 @@ if compositeMaterialName == 'cfk':
 	Nu12, Nu13, Nu23 = 0.021, 0.37, 0.34
 	G12, G13, G23 = 4800.0, 2701.0, 4800.0
 	alpha11,alpha22,alpha33=2.6e-5,-1.0e-6,2.6e-5
-	dsingle = 1.25
+	# dsingle = 1.25
+	dsingle = 2.5
 elif compositeMaterialName == 'gfk':
 	E1, E2, E3 = 9552.6, 39296.0, 9552.6
 	Nu21, Nu13, Nu23 = 0.29, 0.38, 0.29

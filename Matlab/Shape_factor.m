@@ -1,9 +1,9 @@
-a = 100;
-b = 100;
-c = 500;
+a = 579.1;
+b = 579.1;
+c = 2883.6;
 n1 = 0.5;
 n2 = 0.5;
-thick = 5;
+thick = 16;
 V_inner = superellipsoid_volume(a, b, c, n1, n2);
 
 V_outer = superellipsoid_volume(a+thick, b+thick, c+thick, n1, n2);
