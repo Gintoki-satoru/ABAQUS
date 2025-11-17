@@ -1,13 +1,13 @@
 % --- Target volumes from the reference tank ---
-V_inner_target = 6.993;    % m³
-V_wall_target  = 0.086;    % m³
+V_inner_target = 0.0587;    % m³
+V_wall_target  = 0.0017496;    % m³
 V_outer_target = V_inner_target + V_wall_target;
 
 % --- Superellipsoid exponents ---
-n1 = 1;
-n2 = 1;
+n1 = 0.5;
+n2 = 0.5;
 
-% --- Aspect ratio (a:b:c = 9:2:10) ---
+% --- Aspect ratio (a:b:c) ---
 ratio = [9, 2, 10];
 
 % --- Initial guess: [a, t] ---
@@ -22,7 +22,7 @@ t = x_sol(2);
 b = (ratio(2)/ratio(1)) * a;
 c = (ratio(3)/ratio(1)) * a;
 
-fprintf('\nEquivalent superellipsoid (a:b:c = 9:2:10):\n');
+fprintf('\nEquivalent superellipsoid:\n');
 fprintf(' a = %.4f m\n b = %.4f m\n c = %.4f m\n thickness = %.5f m\n', a, b, c, t);
 
 % ================================================================
@@ -37,8 +37,8 @@ function F = volume_error_ratio(x, ratio, V_inner_target, V_outer_target, n1, n2
 
     % Outer dimensions preserve same ratio
     a_o = a + t;
-    b_o = (ratio(2)/ratio(1))*(a + t);
-    c_o = (ratio(3)/ratio(1))*(a + t);
+    b_o = b + t;
+    c_o = c + t;
 
     % Compute inner & outer volumes
     V_inner = superellipsoid_volume(a, b, c, n1, n2);

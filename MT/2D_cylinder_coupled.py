@@ -176,12 +176,12 @@ rBias = 7
 
 #Probekörpergeometrie
 #Innenradius
-ri = 180
+ri = 152.5
 #Länge der Tangente
 ltan=300
 #3D tiefe
 length=2
-heatcoeff = 1.919406741845010e-09
+heatcoeff = 9.9934e-06
 
 compositeMaterialName = 'cfk'  # 'cfk', 'cfkDuro', 'cfk'
 AngleName = 'bestSymm'  # 'bestSymm', 'bestUnsymm', 'Vergleichslaminat', 'Test'
@@ -241,7 +241,7 @@ if compositeMaterialName == 'cfk':
 	G12, G13, G23 = 4800.0, 2701.0, 4800.0
 	alpha11,alpha22,alpha33=2.6e-5,-1.0e-6,2.6e-5
 	# dsingle = 1.25
-	dsingle = 2.5
+	dsingle = 2
 elif compositeMaterialName == 'gfk':
 	E1, E2, E3 = 9552.6, 39296.0, 9552.6
 	Nu21, Nu13, Nu23 = 0.29, 0.38, 0.29
@@ -316,7 +316,7 @@ else:
 	boolCircForce = False
 
 # Betrag des angreifenden Innen-/Aussendruckes:
-OuterPressure, InnerPressure = 0.0, 0.412
+OuterPressure, InnerPressure = 0.0, 1.0
 if OuterPressure != 0.0 or InnerPressure != 0.0:
 	boolPressure = True
 else:

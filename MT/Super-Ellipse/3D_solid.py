@@ -23,15 +23,15 @@ model.rootAssembly.clearGeometryCache()
 model.rootAssembly.regenerate()
 
 ################ Parameters #####################
-a, b, c = 1570.3, 349.0, 1744.8   # inner semi-axes
+a, b, c = 141.0, 141.0, 705.0   # inner semi-axes
 total_length = c
-thick = 2.8                     # total thickness
-n1, n2 = 0.5, 0.5               # shape exponents
+thick = 1.89                     # total thickness
+n1, n2 = 1.0, 1.0               # shape exponents
 num_points = 30                 # points per curve
 num_layers = 1                  # number of layers through thickness
 num_theta_sections = 5          # number of θ sections(min 2): For even number, the number of partitions created will be (num_theta_sections + 1)
 num_partitions = 4              # number of partitions for face BC
-pressure_value = 0.312            # pressure magnitude (MPa) Pa -> 10^6
+pressure_value = 1.0            # pressure magnitude (MPa) Pa -> 10^6
 mesh_size = 2.0                 # mesh size
 
 a_out, b_out, c_out = a + thick, b + thick, c + thick  # outer semi-axes
@@ -659,7 +659,7 @@ s1 = a1.instances['SuperEllipsoid-1'].faces
 faces_combined = []
 
 for i, phi_i in enumerate(phi_surf):
-    theta_i = math.radians(1)
+    theta_i = math.radians(5)
     pt = superellipsoid_point_3d(phi_i, theta_i, a, b, c, n1, n2)
     found = None
     search_tol = 0.1
