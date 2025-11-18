@@ -39,7 +39,7 @@ model.rootAssembly.regenerate()
 ################ Parameters #####################
 a, b, c = 141.0, 141.0, 705.0   # inner semi-axes
 total_length = c
-thick = 2                       # total thickness
+thick = 2.0                       # total thickness
 n1, n2 = 1.0, 1.0               # shape exponents
 num_points = 30                 # points per curve
 num_layers = 1                  # number of layers through thickness
@@ -219,7 +219,7 @@ def create_layer_part(model, layer_index, num_theta_sections):
     create_wire_splines(p, outer_case2)
     # --- Remove extra wires ---
     center = (0.0, 0.0, c_o)
-    radius = 0.5
+    radius = 0.1
     edges_near_top = p.edges.getByBoundingSphere(center=center, radius=radius)
     center_bottom = (0.0, 0.0, c_i)
     edges_near_bottom = p.edges.getByBoundingSphere(center=center_bottom, radius=radius)
@@ -692,7 +692,7 @@ for i in range(0, len(phi_vals)):
 
 ph_o = math.radians(90)
 if n2 and n1 >= 1.0:
-    x = math.radians(1)
+    x = math.radians(5)
 else:
     x = math.radians(0.01)
 

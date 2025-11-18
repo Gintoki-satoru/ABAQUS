@@ -120,38 +120,38 @@ def equivalent_heat_coeff(
     return Q_total, T3, T2, T1, h_eq
 
 # 1. Compute area
-a, b, c = 141.0, 141.0, 705.0
-thick = 2                     
-n1, n2 = 1.0, 1.0
-t_ins = 16
-t_outer = 2
-k_liner = 0.0306
-k_outer = 0.0306
-k_ins = 3.0300e-08
-A_liner = superellipsoid_area(a, b, c, n1, n2)
-A_ins = superellipsoid_area(a + thick, b + thick, c + thick, n1, n2)
-A_outer = superellipsoid_area(a + thick + t_ins, b + thick + t_ins, c + thick + t_ins, n1, n2)#
-A_outer_total = superellipsoid_area(a + thick + t_ins + t_outer, b + thick + t_ins + t_outer, c + thick + t_ins + t_outer, n1, n2)
+# a, b, c = 141.0, 141.0, 705.0
+# thick = 2                     
+# n1, n2 = 1.0, 1.0
+# t_ins = 16
+# t_outer = 2
+# k_liner = 0.0306
+# k_outer = 0.0306
+# k_ins = 3.0300e-08
+# A_liner = superellipsoid_area(a, b, c, n1, n2)
+# A_ins = superellipsoid_area(a + thick, b + thick, c + thick, n1, n2)
+# A_outer = superellipsoid_area(a + thick + t_ins, b + thick + t_ins, c + thick + t_ins, n1, n2)#
+# A_outer_total = superellipsoid_area(a + thick + t_ins + t_outer, b + thick + t_ins + t_outer, c + thick + t_ins + t_outer, n1, n2)
 
-# 2. Compute volume
-V_inner = superellipsoid_volume(a + thick, b + thick, c + thick, n1, n2) - superellipsoid_volume(a, b, c, n1, n2)
-V_ins = superellipsoid_volume(a + thick + t_ins, b + thick + t_ins, c + thick + t_ins, n1, n2) - superellipsoid_volume(a + thick, b + thick, c + thick, n1, n2)
-V_outer = superellipsoid_volume(a + thick + t_ins + t_outer, b + thick + t_ins + t_outer, c + thick + t_ins + t_outer, n1, n2) - superellipsoid_volume(a + thick + t_ins, b + thick + t_ins, c + thick + t_ins, n1, n2)
+# # 2. Compute volume
+# V_inner = superellipsoid_volume(a + thick, b + thick, c + thick, n1, n2) - superellipsoid_volume(a, b, c, n1, n2)
+# V_ins = superellipsoid_volume(a + thick + t_ins, b + thick + t_ins, c + thick + t_ins, n1, n2) - superellipsoid_volume(a + thick, b + thick, c + thick, n1, n2)
+# V_outer = superellipsoid_volume(a + thick + t_ins + t_outer, b + thick + t_ins + t_outer, c + thick + t_ins + t_outer, n1, n2) - superellipsoid_volume(a + thick + t_ins, b + thick + t_ins, c + thick + t_ins, n1, n2)
 
-# 3. Compute shape factors
-S_liner = shape_factor(A_liner, V_inner, thick, a, b, c)
-S_ins   = shape_factor(A_ins,   V_ins, t_ins,   a, b, c)
-S_outer = shape_factor(A_outer, V_outer, t_outer, a, b, c)
+# # 3. Compute shape factors
+# S_liner = shape_factor(A_liner, V_inner, thick, a, b, c)
+# S_ins   = shape_factor(A_ins,   V_ins, t_ins,   a, b, c)
+# S_outer = shape_factor(A_outer, V_outer, t_outer, a, b, c)
 
-# 4. Compute heat transfer coefficient and temperatures
-Q_total, T3, T2, T1, h_eq = equivalent_heat_coeff(
-    T_air=300, T_LH2=20,
-    A_outer=A_outer_total,
-    hc=10 / 1e6,
-    S_ins=S_ins, k_ins=k_ins,
-    S_liner=S_liner, k_liner=k_liner,
-    S_outer=S_outer, k_outer=k_outer,
-    A_outer_liner=A_ins
-)
+# # 4. Compute heat transfer coefficient and temperatures
+# Q_total, T3, T2, T1, h_eq = equivalent_heat_coeff(
+#     T_air=300, T_LH2=20,
+#     A_outer=A_outer_total,
+#     hc=10 / 1e6,
+#     S_ins=S_ins, k_ins=k_ins,
+#     S_liner=S_liner, k_liner=k_liner,
+#     S_outer=S_outer, k_outer=k_outer,
+#     A_outer_liner=A_ins
+# )
 
-print(Q_total)
+# print(Q_total)

@@ -217,7 +217,7 @@ def create_layer_part(model, layer_index, num_theta_sections, thick):
     create_wire_splines(p, outer_case2)
     # --- Remove extra wires ---
     center = (0.0, 0.0, c_o)
-    radius = 0.5
+    radius = 0.1
     edges_near_top = p.edges.getByBoundingSphere(center=center, radius=radius)
     center_bottom = (0.0, 0.0, c_i)
     edges_near_bottom = p.edges.getByBoundingSphere(center=center_bottom, radius=radius)
@@ -396,7 +396,7 @@ def create_layer_part_wo_45(model, layer_index, num_theta_sections, thick):
     create_wire_splines(p, outer_case1)
     # --- Remove extra wires ---
     center = (0.0, 0.0, c_o)
-    radius = 0.5
+    radius = 0.1
     edges_near_top = p.edges.getByBoundingSphere(center=center, radius=radius)
     center_bottom = (0.0, 0.0, c_i)
     edges_near_bottom = p.edges.getByBoundingSphere(center=center_bottom, radius=radius)
