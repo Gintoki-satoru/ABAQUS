@@ -1,14 +1,14 @@
 % Super-ellipsoid parameters
-a = 100;    % semi-axis (m) or (mm, be consistent)
-b = 100;
-c = 500;
-n1 = 0.5;
-n2 = 0.5;
+a = 161;
+b = 161;
+c = 725;
+n1 = 1;
+n2 = 1;
 
 % Parameter grid resolution (increase for accuracy)
 N = 5250;
-phi = linspace(0, pi/2, N);
-theta = linspace(0, pi/2, N);
+phi = linspace(-pi/2, pi/2, N);
+theta = linspace(-pi, pi, N);
 [PHI, THETA] = meshgrid(phi, theta);
 
 % Helper: signed power function

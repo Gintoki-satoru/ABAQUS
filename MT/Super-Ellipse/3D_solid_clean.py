@@ -1,8 +1,9 @@
 from abaqus import *
 from abaqusConstants import *
 from odbAccess import *
+import __main__
 import sketch
-import os
+import os, sys
 import numpy as np
 
 import section
@@ -11,6 +12,20 @@ import displayGroupMdbToolset as dgm
 import mesh
 import math
 import csv
+
+path_modules = 'U:\\Sachdeva\\MT_Nair\\ABAQUS\\MT\\Super-Ellipse'
+# path_modules = r"C:\Users\lenovo\Desktop\Aerospace\Thesis\ABAQUS\MT\Macros"
+if path_modules not in sys.path:
+    sys.path.append(path_modules)
+
+import Heat_coeff
+
+from Heat_coeff import (
+    superellipsoid_area,
+    superellipsoid_volume,
+    shape_factor,
+    equivalent_heat_coeff
+)
 
 
 session.journalOptions.setValues(replayGeometry=COORDINATE, recoverGeometry=COORDINATE)
@@ -30,9 +45,13 @@ num_points = 30                 # points per curve
 num_layers = 1                  # number of layers through thickness
 num_theta_sections = 5          # number of θ sections(min 2): For even number, the number of partitions created will be (num_theta_sections + 1)
 num_partitions = 4              # number of partitions for face BC
-mesh_size = 4.0                 # mesh size
-heatcoeff = 10.0                # convective heat transfer coefficient (W/mm²K)
-amb_temp = 300.0                # ambient temperature (K)
+mesh_size = 5.0                 # mesh size
+t_ins = 16                      # insulation thickness                      
+t_outer = 2                     # outer layer thickness
+k_liner = 0.0306                # liner thermal conductivity
+k_outer = 0.0306                # outer layer thermal conductivity
+k_ins = 3.0300e-08              # insulation thermal conductivity
+conv_coeff = 10 / 1e6         # convection coefficient W/mm^2K
 
 ################ Helper Functions #####################
 def signed_power(base, exp):
@@ -655,7 +674,7 @@ for pressure_value, target_vm in pressure_targets:
         s1 = a1.instances['SuperEllipsoid-1'].faces
         faces_combined = []
         for i, phi_i in enumerate(phi_surf):
-            theta_i = math.radians(1)
+            theta_i = math.radians(5)
             pt = superellipsoid_point_3d(phi_i, theta_i, a, b, c, n1, n2)
             found = None
             search_tol = 0.1
@@ -679,7 +698,7 @@ for pressure_value, target_vm in pressure_targets:
         faces_combined = []
         for i, phi_i in enumerate(phi_surf):
             theta_i = math.radians(5)
-            pt = superellipsoid_point_3d(phi_i, theta_i, a_out, b_out, c_out, n1, n2)
+            pt = superellipsoid_point_3d(phi_i, theta_i, a + thick, b + thick, c + thick, n1, n2)
             found = None
             search_tol = 0.1
             max_tol = thick
@@ -769,15 +788,36 @@ for pressure_value, target_vm in pressure_targets:
             a1.Set(faces=tuple(layer_face_objs_45), name='Set-Layer-z')
         else:
             print("No faces found for Set-Layer-z.")
-        ############ Interactions ############
-        region=a1.surfaces['Conv_Load']
-        mdb.models['SuperEllipse'].FilmCondition(name='ConvectiveLoad', 
-            createStepName='LoadingStep', surface=region, definition=EMBEDDED_COEFF, 
-            filmCoeff=heatcoeff, filmCoeffAmplitude='', sinkTemperature=amb_temp, 
-            sinkAmplitude='', sinkDistributionType=UNIFORM, sinkFieldName='')
         ############ Load ############
         model.Pressure(name='SurfLoad', createStepName='LoadingStep', 
             region=a1.surfaces['Surf_Load'], magnitude=pressure_value)
+        ############ Heat Flux Calculation ############
+        A_liner = superellipsoid_area(a, b, c, n1, n2)
+        A_ins = superellipsoid_area(a + thick, b + thick, c + thick, n1, n2)
+        A_outer = superellipsoid_area(a + thick + t_ins, b + thick + t_ins, c + thick + t_ins, n1, n2)#
+        A_outer_total = superellipsoid_area(a + thick + t_ins + t_outer, b + thick + t_ins + t_outer, c + thick + t_ins + t_outer, n1, n2)
+        # 2. Compute volume
+        V_inner = superellipsoid_volume(a + thick, b + thick, c + thick, n1, n2) - superellipsoid_volume(a, b, c, n1, n2)
+        V_ins = superellipsoid_volume(a + thick + t_ins, b + thick + t_ins, c + thick + t_ins, n1, n2) - superellipsoid_volume(a + thick, b + thick, c + thick, n1, n2)
+        V_outer = superellipsoid_volume(a + thick + t_ins + t_outer, b + thick + t_ins + t_outer, c + thick + t_ins + t_outer, n1, n2) - superellipsoid_volume(a + thick + t_ins, b + thick + t_ins, c + thick + t_ins, n1, n2)
+        # 3. Compute shape factors
+        S_liner = shape_factor(A_liner, V_inner, thick, a, b, c)
+        S_ins   = shape_factor(A_ins,   V_ins, t_ins,   a, b, c)
+        S_outer = shape_factor(A_outer, V_outer, t_outer, a, b, c)
+        # 4. Compute heat transfer coefficient and temperatures
+        Q_total, T3, T2, T1, h_eq = equivalent_heat_coeff(
+            T_air=300, T_LH2=20,
+            A_outer=A_outer_total,
+            hc=10,
+            S_ins=S_ins, k_ins=k_ins,
+            S_liner=S_liner, k_liner=k_liner,
+            S_outer=S_outer, k_outer=k_outer,
+            A_outer_liner=A_ins
+        )
+        region = a1.surfaces['Conv_Load']
+        mdb.models['SuperEllipse'].SurfaceHeatFlux(name='flux_load', 
+            createStepName='LoadingStep', region=region, magnitude=Q_total, 
+            distributionType=TOTAL_FORCE)
         ############ BC ############
         region = a1.sets['Set-Layer-x']
         mdb.models['SuperEllipse'].XsymmBC(name='BC-2', createStepName='Initial', 
@@ -799,7 +839,7 @@ for pressure_value, target_vm in pressure_targets:
         pickedCells = c1.getByBoundingBox(xMin=-1e6, xMax=1e6,
                                         yMin=-1e6, yMax=1e6,
                                         zMin=-1e6, zMax=1e6)
-        elemType1 = mesh.ElemType(elemCode=C3D20R, elemLibrary=STANDARD)
+        elemType1 = mesh.ElemType(elemCode=C3D20RT, elemLibrary=STANDARD)
         p1.setElementType(regions=(pickedCells,), elemTypes=(elemType1,))
         p1.seedPart(size=mesh_size, deviationFactor=0.1, minSizeFactor=0.01)
         pt = superellipsoid_point_3d(0.0, 0.0, a + thick/2, b + thick/2, c + thick/2, n1, n2)
@@ -813,7 +853,7 @@ for pressure_value, target_vm in pressure_targets:
                 memoryUnits=PERCENTAGE, getMemoryFromAnalysis=True, 
                 explicitPrecision=SINGLE, nodalOutputPrecision=SINGLE, echoPrint=OFF, 
                 modelPrint=OFF, contactPrint=OFF, historyPrint=OFF, userSubroutine='', 
-                scratch='', resultsFormat=ODB, multiprocessingMode=DEFAULT, numCpus=4, 
+                scratch='C:\\abaqus_tmp', resultsFormat=ODB, multiprocessingMode=DEFAULT, numCpus=4, 
                 numDomains=4, numGPUs=0)
         job.submit()
         job.waitForCompletion()
@@ -829,10 +869,12 @@ for pressure_value, target_vm in pressure_targets:
             print("Checking coarse step…")
             if max_vm < target_vm:
                 # still safe → reduce thickness and continue
+                if thick <= 0.5:
+                    step_coarse = 0.1
                 prev_thick = thick
                 thick = thick - step_coarse
                 print("  Below target → next thickness = %.3f mm" % thick)
-                if thick <= 0.5:
+                if thick <= 0.1:
                     print("Reached minimum thickness.")
                     break
                 continue
@@ -868,9 +910,15 @@ print("\nFinal Results:")
 for r in results:
     print("thickness=%.2f mm, pressure=%.3f MPa → von Mises=%.2f MPa" % tuple(r))
 
-with open("thickness_pressure_results.csv", "wb") as f:
+# with open("thickness_pressure_results.csv", "wb") as f:
+#     w = csv.writer(f)
+#     w.writerow(["thickness_mm","pressure_MPa","max_vm_MPa"])
+#     w.writerows(results)
+
+with open("thickness_pressure_results.csv", "w", newline='') as f:
     w = csv.writer(f)
-    w.writerow(["thickness_mm","pressure_MPa","max_vm_MPa"])
+    w.writerow(["thickness_mm", "pressure_MPa", "max_vm_MPa"])
     w.writerows(results)
 
 print("\nSaved to thickness_pressure_results.csv")
+

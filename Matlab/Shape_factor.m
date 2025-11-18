@@ -1,9 +1,9 @@
-a = 579.1;
-b = 579.1;
-c = 2883.6;
-n1 = 0.5;
-n2 = 0.5;
-thick = 16;
+a = 159;
+b = 159;
+c = 723;
+n1 = 1;
+n2 = 1;
+thick = 2;
 V_inner = superellipsoid_volume(a, b, c, n1, n2);
 
 V_outer = superellipsoid_volume(a+thick, b+thick, c+thick, n1, n2);
@@ -12,7 +12,7 @@ V_material = V_outer - V_inner;
 fprintf('Superellipsoid Volume = %.3f mm^3\n', V_material);
 
 % Parameter grid resolution
-N = 5000;
+N = 5250;
 phi = linspace(-pi/2, pi/2, N);
 theta = linspace(-pi, pi, N);
 [PHI, THETA] = meshgrid(phi, theta);
@@ -26,9 +26,9 @@ Y = b * spow(cos(PHI), n1) .* spow(sin(THETA), n2);
 Z = c * spow(sin(PHI), n1);
 
 % Partial derivatives (numerical)
-[dX_dtheta, dX_dphi] = gradient(X, theta, phi);
-[dY_dtheta, dY_dphi] = gradient(Y, theta, phi);
-[dZ_dtheta, dZ_dphi] = gradient(Z, theta, phi);
+[dX_dphi, dX_dtheta] = gradient(X, phi, theta);
+[dY_dphi, dY_dtheta] = gradient(Y, phi, theta);
+[dZ_dphi, dZ_dtheta] = gradient(Z, phi, theta);
 
 % Tangent vectors
 r_phi   = cat(3, dX_dphi,   dY_dphi,   dZ_dphi);
@@ -52,6 +52,7 @@ expr = 1.26 - (2 - sqrt(A)/ls) / (9*sqrt(1 - 4.79*(V_inner)^(2/3)/A));
 n = max(expr, 1.0);
 
 S = (S_0^n + S_inf^n)^(1/n);
+fprintf('Shape factor = %.3f mm\n', S);
 
 function V = superellipsoid_volume(a, b, c, n1, n2)
     e1 =2/n1;

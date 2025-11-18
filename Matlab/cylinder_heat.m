@@ -73,11 +73,11 @@ R_outer_dome = (1/(4*pi*k_outer)) * (1/r_ins_out - 1/r_outer);
 R_outer      = (R_outer_cyl * R_outer_dome) / (R_outer_cyl + R_outer_dome);
 
 % ---- Outer convection ----
-R_conv = 1 / (h_out * A_outer_total)
+R_conv = 1 / (h_out * A_outer_total);
 
 % ---- Total resistance (series) ----
 R_total = R_liner + R_ins + R_outer + R_conv;
 
 % ---- Heat flow ----
-Q = (T_ambient - T_inside) / R_total;
+Q = 1.13*1.3*(T_ambient - T_inside) / R_total;
 end

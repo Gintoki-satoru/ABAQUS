@@ -1,8 +1,9 @@
 from abaqus import *
 from abaqusConstants import *
 from odbAccess import *
+import __main__
 import sketch
-import os
+import os, sys
 import numpy as np
 
 import section
@@ -12,6 +13,19 @@ import mesh
 import math
 import csv
 
+path_modules = 'U:\\Sachdeva\\MT_Nair\\ABAQUS\\MT\\Super-Ellipse'
+# path_modules = r"C:\Users\lenovo\Desktop\Aerospace\Thesis\ABAQUS\MT\Macros"
+if path_modules not in sys.path:
+    sys.path.append(path_modules)
+
+import Heat_coeff
+
+from Heat_coeff import (
+    superellipsoid_area,
+    superellipsoid_volume,
+    shape_factor,
+    equivalent_heat_coeff
+)
 
 session.journalOptions.setValues(replayGeometry=COORDINATE, recoverGeometry=COORDINATE)
 
@@ -25,16 +39,20 @@ model.rootAssembly.regenerate()
 ################ Parameters #####################
 a, b, c = 141.0, 141.0, 705.0   # inner semi-axes
 total_length = c
-thick = 1.89                     # total thickness
+thick = 2                       # total thickness
 n1, n2 = 1.0, 1.0               # shape exponents
 num_points = 30                 # points per curve
 num_layers = 1                  # number of layers through thickness
 num_theta_sections = 5          # number of θ sections(min 2): For even number, the number of partitions created will be (num_theta_sections + 1)
 num_partitions = 4              # number of partitions for face BC
 pressure_value = 1.0            # pressure magnitude (MPa) Pa -> 10^6
-mesh_size = 2.5                 # mesh size
-heatcoeff = 10.0                # convective heat transfer coefficient (W/mm²K)
-amb_temp = 300.0                # ambient temperature (K)
+mesh_size = 3                   # mesh size
+t_ins = 16                      # insulation thickness                      
+t_outer = 2                     # outer layer thickness
+k_liner = 0.0306                # liner thermal conductivity
+k_outer = 0.0306                # outer layer thermal conductivity
+k_ins = 3.0300e-08              # insulation thermal conductivity
+conv_coeff = 10 / 1e6         # convection coefficient W/mm^2K
 
 a_out, b_out, c_out = a + thick, b + thick, c + thick  # outer semi-axes
 
@@ -735,6 +753,14 @@ if faces_combined:
 else:
     print("No faces found for surface creation.")
 
+total_area = 0.0
+
+for farray in faces_combined:
+    face = farray[0]      # extract Face object
+    total_area += face.getSize()   # <-- get surface area in mm^2
+
+print("\nSelected Load Surface Area = %.4f mm^2" % (total_area))
+
 ########### Create Set ############
 
 layer_thickness = float(thick / num_layers)
@@ -814,16 +840,46 @@ else:
     print("No faces found for Set-Layer-z.")
 
 ############ Interactions ############
-region=a1.surfaces['Conv_Load']
-mdb.models['SuperEllipse'].FilmCondition(name='ConvectiveLoad', 
-    createStepName='LoadingStep', surface=region, definition=EMBEDDED_COEFF, 
-    filmCoeff=heatcoeff, filmCoeffAmplitude='', sinkTemperature=amb_temp, 
-    sinkAmplitude='', sinkDistributionType=UNIFORM, sinkFieldName='')
+# region=a1.surfaces['Conv_Load']
+# mdb.models['SuperEllipse'].FilmCondition(name='ConvectiveLoad', 
+#     createStepName='LoadingStep', surface=region, definition=EMBEDDED_COEFF, 
+#     filmCoeff=heatcoeff, filmCoeffAmplitude='', sinkTemperature=amb_temp, 
+#     sinkAmplitude='', sinkDistributionType=UNIFORM, sinkFieldName='')
 
 
 ############ Load ############
 model.Pressure(name='SurfLoad', createStepName='LoadingStep', 
     region=a1.surfaces['Surf_Load'], magnitude=pressure_value)
+
+A_liner = superellipsoid_area(a, b, c, n1, n2)
+A_ins = superellipsoid_area(a + thick, b + thick, c + thick, n1, n2)
+A_outer = superellipsoid_area(a + thick + t_ins, b + thick + t_ins, c + thick + t_ins, n1, n2)#
+A_outer_total = superellipsoid_area(a + thick + t_ins + t_outer, b + thick + t_ins + t_outer, c + thick + t_ins + t_outer, n1, n2)
+
+# 2. Compute volume
+V_inner = superellipsoid_volume(a + thick, b + thick, c + thick, n1, n2) - superellipsoid_volume(a, b, c, n1, n2)
+V_ins = superellipsoid_volume(a + thick + t_ins, b + thick + t_ins, c + thick + t_ins, n1, n2) - superellipsoid_volume(a + thick, b + thick, c + thick, n1, n2)
+V_outer = superellipsoid_volume(a + thick + t_ins + t_outer, b + thick + t_ins + t_outer, c + thick + t_ins + t_outer, n1, n2) - superellipsoid_volume(a + thick + t_ins, b + thick + t_ins, c + thick + t_ins, n1, n2)
+
+# 3. Compute shape factors
+S_liner = shape_factor(A_liner, V_inner, thick, a, b, c)
+S_ins   = shape_factor(A_ins,   V_ins, t_ins,   a, b, c)
+S_outer = shape_factor(A_outer, V_outer, t_outer, a, b, c)
+
+# 4. Compute heat transfer coefficient and temperatures
+Q_total, T3, T2, T1, h_eq = equivalent_heat_coeff(
+    T_air=300, T_LH2=20,
+    A_outer=A_outer_total,
+    hc=10,
+    S_ins=S_ins, k_ins=k_ins,
+    S_liner=S_liner, k_liner=k_liner,
+    S_outer=S_outer, k_outer=k_outer,
+    A_outer_liner=A_ins
+)
+region = a1.surfaces['Conv_Load']
+mdb.models['SuperEllipse'].SurfaceHeatFlux(name='flux_load', 
+    createStepName='LoadingStep', region=region, magnitude=Q_total, 
+    distributionType=TOTAL_FORCE)
 
 ############ BC ############
 region = a1.sets['Set-Layer-x']
