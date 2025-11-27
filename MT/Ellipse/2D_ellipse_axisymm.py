@@ -13,10 +13,11 @@ import math
 import csv
 
 
-# path_modules = 'N:\\Sachdeva\\MT_Nair\\ABAQUS\\MT\\Macros'
-path_modules = 'D:\\psingh\\MT\\ABAQUS\\MT\\Macros'
+path_modules = 'U:\\Sachdeva\\MT_Nair\\ABAQUS\\MT\\Macros'
+# path_modules = 'D:\\psingh\\MT\\ABAQUS\\MT\\Macros'
 # path_modules = r"C:\Users\lenovo\Desktop\Aerospace\Thesis\ABAQUS\MT\Macros"
-os.chdir(path_modules)
+if path_modules not in sys.path:
+    sys.path.append(path_modules)
 
 # Further packages:
 import coordinateTransformation_ellipse as ct
@@ -28,9 +29,9 @@ session.journalOptions.setValues(replayGeometry=COORDINATE, recoverGeometry=COOR
 # Note: All dimensions are to be given as a float (e.g., 10.0 not 10)
 
 m_a_inner = 100.0  # Semi-major axis of the inner ellipse
-m_b_inner = 100.0  # Semi-minor axis of the inner ellipse
+m_b_inner = 70.0  # Semi-minor axis of the inner ellipse
 
-thick = 5.0  # Thickness
+thick = 1.0  # Thickness
 
 m_a_outer = m_a_inner + thick
 m_b_outer = m_b_inner + thick

@@ -5,17 +5,16 @@ function V = superellipsoid_volume(a, b, c, n1, n2)
         (gamma(1 + 2/e1) * gamma(1 + (1/e2 + 2/e1)));
 end
 
- a = 117.1;
- b = 117.1;
- c = 585.4;
+a = 319.1;
+b = 70.9;
+c = 354.6;
 n1 = 0.5;
 n2 = 0.5;
-thick = 5.15625;
+thick = 5;
 
 V_inner = superellipsoid_volume(a, b, c, n1, n2);
 
-V_outer = superellipsoid_volume(a+thick, b+thick, c+thick, n1, n2);
+V_cube = 8*a*b*c;
 
-V_material = V_outer - V_inner;
-fprintf('Superellipsoid Volume = %.6f m^3\n', V_material);
-
+eff = 5.870308322012401e+07/V_cube*100;
+fprintf('Packing Efficiency = %.3f \n', eff);

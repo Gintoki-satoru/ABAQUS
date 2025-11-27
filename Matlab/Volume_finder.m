@@ -8,7 +8,7 @@ n1 = 0.5;
 n2 = 0.5;
 
 % --- Aspect ratio (a:b:c) ---
-ratio = [9, 2, 10];
+ratio = [9, 1, 5];
 
 % --- Initial guess: [a, t] ---
 x0 = [0.3, 0.004];  % a ~ 0.3 m, t ~ 4 mm

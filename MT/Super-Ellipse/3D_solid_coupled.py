@@ -37,16 +37,16 @@ model.rootAssembly.clearGeometryCache()
 model.rootAssembly.regenerate()
 
 ################ Parameters #####################
-a, b, c = 141.0, 141.0, 705.0   # inner semi-axes
+a, b, c = 100.0, 100.0, 70.0   # inner semi-axes
 total_length = c
-thick = 2.0                       # total thickness
-n1, n2 = 1.0, 1.0               # shape exponents
+thick = 1.0                    # total thickness
+n1, n2 = 0.8, 1               # shape exponents
 num_points = 30                 # points per curve
 num_layers = 1                  # number of layers through thickness
-num_theta_sections = 5          # number of θ sections(min 2): For even number, the number of partitions created will be (num_theta_sections + 1)
+num_theta_sections = 15          # number of θ sections(min 2): For even number, the number of partitions created will be (num_theta_sections + 1)
 num_partitions = 4              # number of partitions for face BC
 pressure_value = 1.0            # pressure magnitude (MPa) Pa -> 10^6
-mesh_size = 3                   # mesh size
+mesh_size = 1                   # mesh size
 t_ins = 16                      # insulation thickness                      
 t_outer = 2                     # outer layer thickness
 k_liner = 0.0306                # liner thermal conductivity
@@ -402,7 +402,7 @@ def create_layer_part_wo_45(model, layer_index, num_theta_sections):
     create_wire_splines(p, outer_case2)'''
     # --- Remove extra wires ---
     center = (0.0, 0.0, c_o)
-    radius = 0.5
+    radius = 0.1
     edges_near_top = p.edges.getByBoundingSphere(center=center, radius=radius)
     center_bottom = (0.0, 0.0, c_i)
     edges_near_bottom = p.edges.getByBoundingSphere(center=center_bottom, radius=radius)
@@ -686,7 +686,7 @@ model.CoupledTempDisplacementStep(name='LoadingStep',
 ############ Create Surface ############
 ### Strat - 1 ###
 phi_surf = []
-
+phi_vals = [math.radians(15)]
 for i in range(0, len(phi_vals)):
     phi_surf.append(phi_vals[i] - math.radians(10))
 
@@ -911,5 +911,5 @@ p1.setElementType(regions=(pickedCells,), elemTypes=(elemType1,))
 p1.seedPart(size=mesh_size, deviationFactor=0.1, minSizeFactor=0.01)
 pt = superellipsoid_point_3d(0.0, 0.0, a + thick/2, b + thick/2, c + thick/2, n1, n2)
 pickedEdges = e1.findAt((pt, ))
-p1.seedEdgeByNumber(edges=pickedEdges, number=4, constraint=FINER)    
+p1.seedEdgeByNumber(edges=pickedEdges, number=6, constraint=FINER)    
 p1.generateMesh()
