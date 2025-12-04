@@ -37,16 +37,16 @@ model.rootAssembly.clearGeometryCache()
 model.rootAssembly.regenerate()
 
 ################ Parameters #####################
-a, b, c = 100.0, 100.0, 70.0   # inner semi-axes
+a, b, c = 110.04, 110.04, 990.4   # inner semi-axes
 total_length = c
-thick = 1.0                    # total thickness
-n1, n2 = 0.8, 1               # shape exponents
+thick = 1.541                    # total thickness
+n1, n2 = 0.85, 1.0               # shape exponents
 num_points = 30                 # points per curve
 num_layers = 1                  # number of layers through thickness
 num_theta_sections = 15          # number of θ sections(min 2): For even number, the number of partitions created will be (num_theta_sections + 1)
 num_partitions = 4              # number of partitions for face BC
 pressure_value = 1.0            # pressure magnitude (MPa) Pa -> 10^6
-mesh_size = 1                   # mesh size
+mesh_size = 3                   # mesh size
 t_ins = 16                      # insulation thickness                      
 t_outer = 2                     # outer layer thickness
 k_liner = 0.0306                # liner thermal conductivity
@@ -578,40 +578,9 @@ mdb.models['SuperEllipse'].parts['SuperEllipsoid'].setValues(
 
 ############ Partitioning ############
 
-#### Strat - 4 ####
-
-theta_case = math.radians(0)
-phi_vals = [math.radians(15)]
-
-for phi_example in phi_vals:
-    # Compute inner and outer points on superellipsoid surface
-    pt_inner = superellipsoid_point_3d(phi_example, theta_case, a, b, c, n1, n2)
-    n_vec = superellipsoid_normal(phi_example, theta_case, a, b, c, n1, n2)
-    theta_out = math.radians(90)
-    pt_outer = superellipsoid_point_3d(phi_example, theta_out, a, b, c, n1, n2)
-    pt_inner_offset = offset_point_along_normal(pt_inner, n_vec, 1e-3)
-    # Create datum points and plane for partition
-    datum_inner = p.DatumPointByCoordinate(coords=pt_inner)
-    datum_outer = p.DatumPointByCoordinate(coords=pt_inner_offset)
-    datum_xy = p.DatumPointByCoordinate(coords=pt_outer)
-    plane_datum = p.DatumPlaneByThreePoints(
-        point1=p.datums[datum_inner.id],
-        point2=p.datums[datum_outer.id],
-        point3=p.datums[datum_xy.id]
-    )  
-    cell_to_partition = p.cells.getByBoundingBox(
-        xMin=-1e6, xMax=1e6,
-        yMin=-1e6, yMax=1e6,
-        zMin=-1e6, zMax=1e6
-    )  
-    p.PartitionCellByDatumPlane(
-        cells=cell_to_partition,
-        datumPlane=p.datums[plane_datum.id]
-    )
-
 # ---- Partition for face ----#
 
-phi_min = math.radians(15)
+phi_min = math.radians(0)
 phi_max = math.radians(90)
 phi_step = (phi_max - phi_min) / (num_partitions + 1)
 phi_face = [phi_min + i * phi_step for i in range(1, num_partitions + 1)]
@@ -675,6 +644,37 @@ for theta_case in theta_spl:
             )
         else:
             print("No faces found for φ =", round(math.degrees(phi_example), 2))
+
+#### Strat - 4 ####
+
+theta_case = math.radians(0)
+phi_vals = [math.radians(15)]
+
+for phi_example in phi_vals:
+    # Compute inner and outer points on superellipsoid surface
+    pt_inner = superellipsoid_point_3d(phi_example, theta_case, a, b, c, n1, n2)
+    n_vec = superellipsoid_normal(phi_example, theta_case, a, b, c, n1, n2)
+    theta_out = math.radians(90)
+    pt_outer = superellipsoid_point_3d(phi_example, theta_out, a, b, c, n1, n2)
+    pt_inner_offset = offset_point_along_normal(pt_inner, n_vec, 1e-3)
+    # Create datum points and plane for partition
+    datum_inner = p.DatumPointByCoordinate(coords=pt_inner)
+    datum_outer = p.DatumPointByCoordinate(coords=pt_inner_offset)
+    datum_xy = p.DatumPointByCoordinate(coords=pt_outer)
+    plane_datum = p.DatumPlaneByThreePoints(
+        point1=p.datums[datum_inner.id],
+        point2=p.datums[datum_outer.id],
+        point3=p.datums[datum_xy.id]
+    )  
+    cell_to_partition = p.cells.getByBoundingBox(
+        xMin=-1e6, xMax=1e6,
+        yMin=-1e6, yMax=1e6,
+        zMin=-1e6, zMax=1e6
+    )  
+    p.PartitionCellByDatumPlane(
+        cells=cell_to_partition,
+        datumPlane=p.datums[plane_datum.id]
+    )
 
 
 ############ Step ############
@@ -909,7 +909,27 @@ pickedCells = c1.getByBoundingBox(xMin=-1e6, xMax=1e6,
 elemType1 = mesh.ElemType(elemCode=C3D20RT, elemLibrary=STANDARD)
 p1.setElementType(regions=(pickedCells,), elemTypes=(elemType1,))
 p1.seedPart(size=mesh_size, deviationFactor=0.1, minSizeFactor=0.01)
+# p1.setMeshControls(regions=pickedCells, technique=SWEEP)
 pt = superellipsoid_point_3d(0.0, 0.0, a + thick/2, b + thick/2, c + thick/2, n1, n2)
 pickedEdges = e1.findAt((pt, ))
-p1.seedEdgeByNumber(edges=pickedEdges, number=6, constraint=FINER)    
+p1.seedEdgeByNumber(edges=pickedEdges, number=4, constraint=FINER)    
 p1.generateMesh()
+
+############ Job ############
+job = mdb.Job(name='Job-1', model='SuperEllipse', description='', type=ANALYSIS, 
+            atTime=None, waitMinutes=0, waitHours=0, queue=None, memory=90, 
+            memoryUnits=PERCENTAGE, getMemoryFromAnalysis=True, 
+            explicitPrecision=SINGLE, nodalOutputPrecision=SINGLE, echoPrint=OFF, 
+            modelPrint=OFF, contactPrint=OFF, historyPrint=OFF, userSubroutine='', 
+            scratch='C:\\abaqus_tmp', resultsFormat=ODB, multiprocessingMode=DEFAULT, numCpus=6, 
+            numDomains=6, numGPUs=0)
+job.submit(consistencyChecking=OFF)
+job.waitForCompletion()
+
+############ Stress Value ############
+job_name = "Job-1"
+odb = session.openOdb(job_name + '.odb')
+step_frames = odb.steps['LoadingStep'].frames
+vm_field = step_frames[-1].fieldOutputs['S'].getScalarField(invariant=MISES)
+max_vm = max(v.data for v in vm_field.values)
+print(" → Max von Mises = %.2f MPa" % max_vm)

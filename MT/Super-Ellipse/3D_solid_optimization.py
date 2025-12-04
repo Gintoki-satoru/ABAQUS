@@ -42,7 +42,7 @@ num_points = 30                 # points per curve
 num_layers = 1                  # number of layers through thickness
 num_theta_sections = 15          # number of θ sections(min 2): For even number, the number of partitions created will be (num_theta_sections + 1)
 num_partitions = 4              # number of partitions for face BC
-mesh_size = 2                 # mesh size
+mesh_size = 2.5                 # mesh size
 t_ins = 16                      # insulation thickness                      
 t_outer = 2                     # outer layer thickness
 k_liner = 0.0306                # liner thermal conductivity
@@ -478,7 +478,7 @@ def assemble_and_merge_layers(num_layers):
 
 
 ############ Create layers ############
-csv_file = r"U:\Sachdeva\MT_Nair\ABAQUS\MT\Super-Ellipse\superellipsoid_grid.csv"
+csv_file = r"U:\Sachdeva\MT_Nair\ABAQUS\MT\Super-Ellipse\superellipsoid_parametric_162.csv"
 
 geometries = []
 with open(csv_file, newline='') as f:
@@ -503,13 +503,15 @@ for line in rows[1:]:
     if len(line) < 8 or any(x.strip()=="" for x in line):
         continue
     # ----- PICK EXACT COLUMNS -----
-    n_val = float(line[0])     # column A
-    a_val = float(line[4])     # column E
-    b_val = float(line[5])     # column F
-    c_val = float(line[6])     # column G
-    t_val = float(line[7])     # column H
+    n1_val = float(line[4])     # column A
+    n2_val = float(line[5])
+    a_val = float(line[0])     # column E
+    b_val = float(line[1])     # column F
+    c_val = float(line[2])     # column G
+    t_val = float(line[3])     # column H
     geometries.append({
-        "n": n_val,
+        "n1": n1_val,
+        "n2": n2_val,
         "a": a_val,
         "b": b_val,
         "c": c_val,
@@ -525,12 +527,12 @@ for geom in geometries:
     a  = geom["a"]
     b  = geom["b"]
     c  = geom["c"]
-    n1 = geom["n"]
-    n2 = geom["n"]
+    n1 = geom["n1"]
+    n2 = geom["n2"]
     thick = geom["t_csv"]
     print("\n====================================")
-    print("Running: a=%.3f  b=%.3f  c=%.3f  n=%.3f  t=%.3f"
-          % (a, b, c, n1, thick))
+    print("Running: a=%.3f  b=%.3f  c=%.3f  n1=%.3f  n2=%.3f  t=%.3f"
+          % (a, b, c, n1, n2, thick))
     print("====================================\n")
     # ---- Start fresh model for each run ----
     try:
@@ -618,36 +620,8 @@ for geom in geometries:
     mdb.models['SuperEllipse'].parts['SuperEllipsoid'].setValues(
         geometryRefinement=FINE)
     ############ Partitioning ############
-    #### Strat - 4 ####
-    theta_case = math.radians(0)
-    phi_vals = [math.radians(15)]
-    for phi_example in phi_vals:
-        # Compute inner and outer points on superellipsoid surface
-        pt_inner = superellipsoid_point_3d(phi_example, theta_case, a, b, c, n1, n2)
-        n_vec = superellipsoid_normal(phi_example, theta_case, a, b, c, n1, n2)
-        theta_out = math.radians(90)
-        pt_outer = superellipsoid_point_3d(phi_example, theta_out, a, b, c, n1, n2)
-        pt_inner_offset = offset_point_along_normal(pt_inner, n_vec, 1e-3)
-        # Create datum points and plane for partition
-        datum_inner = p.DatumPointByCoordinate(coords=pt_inner)
-        datum_outer = p.DatumPointByCoordinate(coords=pt_inner_offset)
-        datum_xy = p.DatumPointByCoordinate(coords=pt_outer)
-        plane_datum = p.DatumPlaneByThreePoints(
-            point1=p.datums[datum_inner.id],
-            point2=p.datums[datum_outer.id],
-            point3=p.datums[datum_xy.id]
-        )  
-        cell_to_partition = p.cells.getByBoundingBox(
-            xMin=-1e6, xMax=1e6,
-            yMin=-1e6, yMax=1e6,
-            zMin=-1e6, zMax=1e6
-        )  
-        p.PartitionCellByDatumPlane(
-            cells=cell_to_partition,
-            datumPlane=p.datums[plane_datum.id]
-        )
     # ---- Partition for face ----#
-    phi_min = math.radians(15)
+    phi_min = math.radians(0)
     phi_max = math.radians(90)
     phi_step = (phi_max - phi_min) / (num_partitions + 1)
     phi_face = [phi_min + i * phi_step for i in range(1, num_partitions + 1)]
@@ -710,6 +684,34 @@ for geom in geometries:
                 )
             else:
                 print("No faces found for φ =", round(math.degrees(phi_example), 2))
+    #### Strat - 4 ####
+    theta_case = math.radians(0)
+    phi_vals = [math.radians(15)]
+    for phi_example in phi_vals:
+        # Compute inner and outer points on superellipsoid surface
+        pt_inner = superellipsoid_point_3d(phi_example, theta_case, a, b, c, n1, n2)
+        n_vec = superellipsoid_normal(phi_example, theta_case, a, b, c, n1, n2)
+        theta_out = math.radians(90)
+        pt_outer = superellipsoid_point_3d(phi_example, theta_out, a, b, c, n1, n2)
+        pt_inner_offset = offset_point_along_normal(pt_inner, n_vec, 1e-3)
+        # Create datum points and plane for partition
+        datum_inner = p.DatumPointByCoordinate(coords=pt_inner)
+        datum_outer = p.DatumPointByCoordinate(coords=pt_inner_offset)
+        datum_xy = p.DatumPointByCoordinate(coords=pt_outer)
+        plane_datum = p.DatumPlaneByThreePoints(
+            point1=p.datums[datum_inner.id],
+            point2=p.datums[datum_outer.id],
+            point3=p.datums[datum_xy.id]
+        )  
+        cell_to_partition = p.cells.getByBoundingBox(
+            xMin=-1e6, xMax=1e6,
+            yMin=-1e6, yMax=1e6,
+            zMin=-1e6, zMax=1e6
+        )  
+        p.PartitionCellByDatumPlane(
+            cells=cell_to_partition,
+            datumPlane=p.datums[plane_datum.id]
+        )
     ############ Step ############
     model.CoupledTempDisplacementStep(name='LoadingStep', 
         previous='Initial', response=STEADY_STATE, deltmx=None, cetol=None, 
@@ -899,9 +901,19 @@ for geom in geometries:
             yMin=-1e6, yMax=1e6,
             zMin=-1e6, zMax=1e6
         )
+            # Choose mesh technique based on geometry symmetry
+        if (abs(a - b) < 1e-6) or (abs(b - c) < 1e-6) or (abs(a - c) < 1e-6):
+            # a=b OR b=c OR a=c  → use normal meshing
+            print("   → Using structured mesh.")
+            # Default meshing technique → do nothing
+        else:
+            # Fully asymmetric → use SWEEP
+            print("   → Using SWEEP mesh.")
+            p1.setMeshControls(regions=pickedCells, technique=SWEEP)
         elemType1 = mesh.ElemType(elemCode=C3D20RT, elemLibrary=STANDARD)
         p1.setElementType(regions=(pickedCells,), elemTypes=(elemType1,))
         p1.seedPart(size=mesh_size, deviationFactor=0.1, minSizeFactor=0.01)
+        # p1.setMeshControls(regions=pickedCells, technique=SWEEP)
         pt = superellipsoid_point_3d(
             0.0, 0.0,
             a + thick/2, b + thick/2, c + thick/2,
@@ -926,18 +938,22 @@ for geom in geometries:
             memoryUnits=PERCENTAGE, getMemoryFromAnalysis=True, 
             explicitPrecision=SINGLE, nodalOutputPrecision=SINGLE, echoPrint=OFF, 
             modelPrint=OFF, contactPrint=OFF, historyPrint=OFF, userSubroutine='', 
-            scratch='C:\\abaqus_tmp', resultsFormat=ODB, multiprocessingMode=DEFAULT, numCpus=4, 
-            numDomains=4, numGPUs=0)
-    job.submit()
-    job.waitForCompletion()
-    # ----- Read Max von Mises -----
-    odb = session.openOdb(job_name + '.odb')
-    step_frames = odb.steps['LoadingStep'].frames
-    vm_field = step_frames[-1].fieldOutputs['S'].getScalarField(invariant=MISES)
-    max_vm = max(v.data for v in vm_field.values)
-    odb.close()
-    print(" → Max von Mises = %.2f MPa" % max_vm)
-    results.append([a, b, c, n1, thick, max_vm])
+            scratch='C:\\abaqus_tmp', resultsFormat=ODB, multiprocessingMode=DEFAULT, numCpus=6, 
+            numDomains=6, numGPUs=0)
+    try:
+        job.submit()
+        job.waitForCompletion()
+        odb = session.openOdb(job_name + '.odb')
+        step_frames = odb.steps['LoadingStep'].frames
+        vm_field = step_frames[-1].fieldOutputs['S'].getScalarField(invariant=MISES)
+        max_vm = max(v.data for v in vm_field.values)
+        odb.close()
+        print(" → Max von Mises = %.2f MPa" % max_vm)
+    except Exception as e:
+        print("Job failed or ODB unreadable:", e)
+        max_vm = 1.0
+    # Append result either way
+    results.append([a, b, c, n1, n2, thick, max_vm])
 
 
 # with open("grid.csv", "wb") as f:
@@ -947,7 +963,7 @@ for geom in geometries:
 
 with open("grid.csv", "w", newline='') as f:
     w = csv.writer(f)
-    w.writerow(["thickness_mm", "pressure_MPa", "max_vm_MPa"])
+    w.writerow(['a', 'b', 'c', 'n1', 'n2' 'thick', 'max_vm'])
     w.writerows(results)
 
 print("\nSaved to grid.csv")
