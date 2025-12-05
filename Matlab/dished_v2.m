@@ -3,11 +3,11 @@
 clear; clc; close all;
 
 % Geometry & loading (consistent with the paper: mm & MPa)
-a   = 241.09;      % [mm] cylinder/head radius
-b   = 241.09; % [mm] head depth
-h   = 2.372;        % [mm] thickness
+a   = 126.01;      % [mm] cylinder/head radius
+b   = 630.07; % [mm] head depth
+h   = 1.693;        % [mm] thickness
 p0  = 1;        % [MPa] internal pressure
-k   = 0.5;      
+k   = 0.65/2;      
 N   = 400;      % points along meridian
 
 % 1) Fit n1 so that superellipse meridian best matches paper meridian
@@ -16,7 +16,7 @@ fprintf('Fitted superellipse exponent n1 = %.4f\n', n1_fit);
 
 % 2) Compute stresses for both geometries
 out_paper = head_paper_stress(a, b, h, p0, k, N);
-out_super = head_superellipse_stress(a, b, h, p0, 2, N);
+out_super = head_superellipse_stress(a, b, h, p0, 2/0.65, N);
 
 r = out_paper.r;   % same sampling r for both
 

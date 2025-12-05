@@ -4,11 +4,11 @@ V_wall_target  = 0.0017496;    % m³
 V_outer_target = V_inner_target + V_wall_target;
 
 % --- Superellipsoid exponents ---
-n1 = 0.4;
-n2 = 1;
+n1 = 0.6;
+n2 = 1.4;
 
 % --- Aspect ratio (a:b:c) ---
-ratio = [1, 1, 15];
+ratio = [1, 1, 3];
 
 % --- Initial guess: [a, t] ---
 x0 = [0.3, 0.004];  % a ~ 0.3 m, t ~ 4 mm

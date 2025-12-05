@@ -1,8 +1,8 @@
-a = 100.5;     % mm
+a = 124.34;     % mm
 beta = 0.7;
-b = beta * a;
-k = 0.5;
-h   = 1;   % [mm]
+b = 621.7;
+k = 0.3;
+h   = 1.67;   % [mm]
 p0  = 1;     % [Pa] = 1 MPa
 N   = 200;
 
@@ -97,9 +97,9 @@ function plot_head_shape(a, b, k, N)
 
     % Plot
     figure; hold on; grid on;
-    plot(r, x, 'LineWidth', 2);
-    set(gca, 'YDir','reverse');   % optional: match paper orientation
-    xlabel('r'); ylabel('x');
+    plot(x, r, 'LineWidth', 2);
+    % set(gca, 'YDir','reverse');   % optional: match paper orientation
+    xlabel('x'); ylabel('r');
     title(sprintf('Generalized Ellipsoidal Head Shape (a=%.1f, b=%.1f, k=%.3f)', a, b, k));
     axis equal;
 
