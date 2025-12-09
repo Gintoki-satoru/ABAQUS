@@ -29,9 +29,9 @@ session.journalOptions.setValues(replayGeometry=COORDINATE, recoverGeometry=COOR
 # Note: All dimensions are to be given as a float (e.g., 10.0 not 10)
 
 m_a_inner = 100.0  # Semi-major axis of the inner ellipse
-m_b_inner = 70.0  # Semi-minor axis of the inner ellipse
+m_b_inner = 100.0  # Semi-minor axis of the inner ellipse
 
-thick = 1.0  # Thickness
+thick = 5.0  # Thickness
 
 m_a_outer = m_a_inner + thick
 m_b_outer = m_b_inner + thick

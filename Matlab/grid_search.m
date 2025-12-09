@@ -242,8 +242,8 @@ function generate_superellipsoid_parametric_new()
         b0 = ABC_list(i,2);
         c0 = ABC_list(i,3);
 
-        for n1 = n_vals
-            for n2 = 1
+        for n1 = 1
+            for n2 = n_vals
 
                 % Volume of unscaled base shape
                 V0 = superellipsoid_volume(a0, b0, c0, n1, n2);

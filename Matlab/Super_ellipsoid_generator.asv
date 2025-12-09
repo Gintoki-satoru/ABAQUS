@@ -34,11 +34,11 @@ camlight; lighting gouraud;
 %% Parameters for animation
 a = 100;
 b = 100;
-c = 150;
+c = 100;
 
 % Range of exponents to animate
-n_forward  = linspace(2, 0.2, 120);
-n_backward = linspace(0.2, 2, 120);
+n_forward  = linspace(4, 0.15, 240);
+n_backward = linspace(0.15, 4, 240);
 n_vals = [n_forward n_backward(2:end)];
 
 % Signed power helper
@@ -48,26 +48,26 @@ signed_power = @(base, exp) sign(base) .* (abs(base).^exp);
 [u, v] = meshgrid(linspace(-pi, pi, 120), linspace(-pi/2, pi/2, 60));
 
 % Create video writer
-vfile = VideoWriter('supern!.mp4','MPEG-4');
-vfile.FrameRate = 30;
+vfile = VideoWriter('su.mp4','MPEG-4');
+vfile.FrameRate = 60;
 vfile.Quality   = 95;
 open(vfile);
 
 % Figure setup
 fig = figure('Color', 'white');
 axis equal; axis off;
-view(75, 75);
+view(2, 25);
 
 % Animation loop
 for k = 1:length(n_vals)
 
     n1 = n_vals(k);
-    n2 = 1;
+    n2 = n_vals(k);
 
     % Parametric equations
-    x = a * signed_power(cos(v), n1) .* signed_power(cos(u), n2);
-    y = b * signed_power(cos(v), n1) .* signed_power(sin(u), n2);
-    z = c * signed_power(sin(v), n1);
+    x = a * signed_power(cos(v), n2) .* signed_power(cos(u), n1);
+    y = b * signed_power(cos(v), n2) .* signed_power(sin(u), n1);
+    z = c * signed_power(sin(v), n2);
 
     % Plot
     % fig = figure('Color', '#004e73');
@@ -80,7 +80,7 @@ for k = 1:length(n_vals)
     %     'FontSize', 14);
 
     % Optional slow rotation
-    % view(45 + 0.5*k, 25);
+    view(45 + 0.5*k, 25);
 
     % Capture frame
     frame = getframe(fig);

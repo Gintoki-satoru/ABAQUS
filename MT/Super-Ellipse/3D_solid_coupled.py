@@ -37,10 +37,10 @@ model.rootAssembly.clearGeometryCache()
 model.rootAssembly.regenerate()
 
 ################ Parameters #####################
-a, b, c = 110.04, 110.04, 990.4   # inner semi-axes
+a, b, c = 200.7, 200.7, 267.6   # inner semi-axes
 total_length = c
-thick = 1.541                    # total thickness
-n1, n2 = 0.85, 1.0               # shape exponents
+thick = 2.15                    # total thickness
+n1, n2 = 0.8, 0.8               # shape exponents
 num_points = 30                 # points per curve
 num_layers = 1                  # number of layers through thickness
 num_theta_sections = 15          # number of θ sections(min 2): For even number, the number of partitions created will be (num_theta_sections + 1)
