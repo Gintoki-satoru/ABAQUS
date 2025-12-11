@@ -48,6 +48,7 @@ y = data(:,2);  % z-coordinate
 S11 = data(:,3); % σ_rr
 S22 = data(:,4); % σ_zz
 S12 = data(:,6); % σ_rz (shear)
+S33 = data(:,5); % σ_zz
 
 n = length(x_f);
 
@@ -94,10 +95,13 @@ fprintf('Done! Results saved to transformed_stresses.csv\n');
 
 figure;
 plot(x, s_meri, 'b', 'LineWidth', 2,  'DisplayName','Analytical results'); hold on;
-plot(x_f, sigma_meridional,'ro', 'MarkerSize', 4, 'DisplayName','FEM results');
+plot(x_f, sigma_meridional,'ro', 'MarkerSize', 4, 'DisplayName','2D FEM results');
+plot(X, sigma_m, 'LineWidth', 2,  'DisplayName','3D FEM results');
+
 xlabel('x');
-ylabel('\sigma_\phi (Meridional Stress)');
-% ylim([2 5])
+ylabel('\sigma_\theta (Meridional Stress)');
+% ylim([1.5 6])
+xlim([3 150])
 grid on;
 legend show
-title('Meridional Stress \sigma_\phi vs x');
+title('Meridional Stress \sigma_\theta vs x');

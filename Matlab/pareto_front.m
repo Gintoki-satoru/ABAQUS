@@ -5,10 +5,18 @@ function plot_pareto_front(csvfile)
     % -------------------------------
     T = readtable(csvfile);
 
-
     % Column names (exact as given)
-    pack = T.("PackingEff");  % Packing efficiency
-    stress = T.max_vm;         % Von Mises stress
+    pack = T.("PackingEff");      % Packing efficiency
+    stress = T.max_vm;            % Von Mises stress
+
+    % -------------------------------
+    % Sphere and Cylinder reference values
+    % -------------------------------
+    pack_sphere = 0.5236123585;
+    stress_sphere = 54.26379776;
+
+    pack_cyl = 0.69;
+    stress_cyl = 69.0;
 
     % -------------------------------
     % Plot all points
@@ -16,6 +24,16 @@ function plot_pareto_front(csvfile)
     figure; hold on;
     scatter(pack, stress, 55, 'filled', ...
         'MarkerFaceColor',[0.6 0.6 0.9], 'MarkerEdgeColor','k');
+
+    % Highlight sphere
+    scatter(pack_sphere, stress_sphere, 120, 'g', 'filled', ...
+        'MarkerEdgeColor','k', 'LineWidth',1.2);
+    % text(pack_sphere+0.005, stress_sphere, 'Sphere', 'FontSize',15, 'Color','g');
+
+    % Highlight cylinder
+    scatter(pack_cyl, stress_cyl, 120, 'm', 'filled', ...
+        'MarkerEdgeColor','k', 'LineWidth',1.2);
+    % text(pack_cyl+0.005, stress_cyl, 'Cylinder', 'FontSize',15, 'Color','m');
 
     xlabel('Packing Efficiency');
     ylabel('Max von Mises Stress (MPa)');
@@ -42,25 +60,18 @@ function plot_pareto_front(csvfile)
     plot(pack_p, stress_p, 'r-', 'LineWidth', 2);
     scatter(pack_p, stress_p, 75, 'r', 'filled');
 
-    legend('All designs', 'Pareto optimal', 'Location','best');
+    legend('All designs', 'Sphere', 'Cylinder', 'Pareto optimal', ...
+        'Location','best');
+
     hold off;
 
 end
-
 
 
 % -------------------------------------------------------
 % Pareto helper function
 % -------------------------------------------------------
 function isPareto = find_pareto(data)
-    % data(:,1) = packing efficiency (maximize)
-    % data(:,2) = stress (minimize)
-    %
-    % A point i is Pareto-optimal if:
-    %   No point j has:
-    %      pack_j >= pack_i AND stress_j <= stress_i
-    %      and at least one strict improvement
-
     N = size(data,1);
     isPareto = true(N,1);
 
@@ -84,6 +95,5 @@ function isPareto = find_pareto(data)
     end
 end
 
-
-% plot_pareto_front("combined_pareto.csv");
+% Run
 plot_pareto_front("cleaned_file.csv");

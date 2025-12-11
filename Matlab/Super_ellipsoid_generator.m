@@ -1,10 +1,10 @@
 % Super-ellipsoid parameters
-a = 319.1;
-b = 70.9;
-c = 354.6;
-thick = 1.48;
-epsilon1 = 0.5;
-epsilon2 = 0.5;
+a = 100;
+b = 100;
+c = 100;
+thick = 1;
+epsilon1 = 1;
+epsilon2 = 1;
 
 signed_power = @(base, exp) sign(base) .* (abs(base).^exp);
 
