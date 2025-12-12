@@ -27,13 +27,13 @@ function analyze_triaxial_geometries(csvfile)
     % Only two groups for now: triaxial vs others
     group = strings(height(T),1);
     group(is_triaxial)      = "Unsymmetric (a≠b≠c)";
-    group(~is_triaxial)     = "symmetric / axisymmetric (a=b)";
+    group(~is_triaxial)     = "Axisymmetric (a=b)";
 
     % ---- 1) Boxplot: stress distribution per group ----
     figure;
     boxplot(stress, group);
     ylabel('Max von Mises stress (MPa)');
-    title('Stress comparison: Unsymmetric vs symmetric/axisymmetric geometries');
+    title('Stress comparison: Axisymmetric vs Unsymmetric geometries');
     grid on;
 
     % ---- 2) Check per (n1,n2) whether triaxial ever beats others ----

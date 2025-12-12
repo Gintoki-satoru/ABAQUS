@@ -25,8 +25,8 @@
             <mxPoint x="460" y="370" as="targetPoint" />
           </mxGeometry>
         </mxCell>
-        <mxCell id="pDnFmYf1MIoP0LhhBiqm-34" parent="1" style="text;html=1;whiteSpace=wrap;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;rounded=0;" value="Liner" vertex="1">
-          <mxGeometry height="30" width="60" x="520" y="355" as="geometry" />
+        <mxCell id="pDnFmYf1MIoP0LhhBiqm-34" parent="1" style="text;html=1;whiteSpace=wrap;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;rounded=0;" value="Inner tank" vertex="1">
+          <mxGeometry height="30" width="60" x="530" y="355" as="geometry" />
         </mxCell>
         <mxCell id="pDnFmYf1MIoP0LhhBiqm-35" edge="1" parent="1" style="endArrow=classic;html=1;rounded=0;" value="">
           <mxGeometry height="50" relative="1" width="50" as="geometry">

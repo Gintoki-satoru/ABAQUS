@@ -215,4 +215,4 @@ function compare_packing_n1_n2(csvfile, n_fixed)
 
 end
 
-compare_packing_n1_n2("cleaned_file.csv", 0.75);   % or 1.0, 0.9, etc.
+compare_packing_n1_n2("cleaned_file.csv", 0.8);   % or 1.0, 0.9, etc.
