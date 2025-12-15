@@ -1,20 +1,24 @@
-a = 124.34;     % mm
-beta = 0.7;
-b = 621.7;
-k = 0.3;
-h   = 1.67;   % [mm]
+a = 250;     % mm
+beta = 0.578;
+b = 500;
+k = 0.45;
+h   = 2.5;   % [mm]
 p0  = 1;     % [Pa] = 1 MPa
 N   = 200;
+
 
 [rho, s_th, s_ph, s_VM] = ellipsoidal_head_vonmises(a,b,h,p0,k,N);
 
 % quick plot of von Mises vs parallel radius r = rho*a
 figure
 r = rho * a;
-plot(r, s_VM); xlabel('r [m]'); ylabel('\sigma_{VM} [MPa]');
+plot(r, s_VM); hold on
+% plot(rf, sf);
+xlabel('r [m]'); ylabel('\sigma_{VM} [MPa]')
+hold off
 grid on;
 
-plot_head_shape(a, b, k);
+% plot_head_shape(a, b, k);
 
 
 

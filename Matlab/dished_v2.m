@@ -3,11 +3,11 @@
 clear; clc; close all;
 
 % Geometry & loading (consistent with the paper: mm & MPa)
-a   = 126.01;      % [mm] cylinder/head radius
-b   = 630.07; % [mm] head depth
-h   = 1.693;        % [mm] thickness
+a   = 158.71;      % [mm] cylinder/head radius
+b   = 476.14; % [mm] head depth
+h   = 2.009;        % [mm] thickness
 p0  = 1;        % [MPa] internal pressure
-k   = 0.65/2;      
+k   = 0.6/2;      
 N   = 400;      % points along meridian
 
 % 1) Fit n1 so that superellipse meridian best matches paper meridian
@@ -16,7 +16,7 @@ fprintf('Fitted superellipse exponent n1 = %.4f\n', n1_fit);
 
 % 2) Compute stresses for both geometries
 out_paper = head_paper_stress(a, b, h, p0, k, N);
-out_super = head_superellipse_stress(a, b, h, p0, 2/0.65, N);
+out_super = head_superellipse_stress(a, b, h, p0, 2/0.6, N);
 
 r = out_paper.r;   % same sampling r for both
 
@@ -72,7 +72,7 @@ legend('Paper head', 'Equivalent superellipse (Lamé)', ...
 %% 4) Plot von Mises stress comparison
 figure; hold on; grid on;
 plot(r, out_paper.sigma_VM, 'b-', 'LineWidth', 1.8);
-plot(r, out_super.sigma_VM, 'r--', 'LineWidth', 1.8);
+% plot(r, out_super.sigma_VM, 'r--', 'LineWidth', 1.8);
 xlabel('r [mm]');
 ylabel('\sigma_{VM} [MPa]');
 title('Von Mises stress along meridian');
