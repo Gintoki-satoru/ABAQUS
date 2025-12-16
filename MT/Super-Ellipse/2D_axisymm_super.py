@@ -1,3 +1,5 @@
+# -*- coding: utf-8 -*-
+
 from abaqus import *
 from abaqusConstants import *
 from odbAccess import *
@@ -44,7 +46,7 @@ thick   = 2.009
 r_outer = r_inner + thick
 z_outer = z_inner + thick
 
-n = 0.6
+n = 0.85
 
 n_theta = 80  # number of spline points
 
@@ -52,7 +54,7 @@ N_part = 4  # Number of partitions
 
 mesh_size = 0.5  # Mesh size
 
-Press = 0.1 # Pressure load
+Press = 1 # Pressure load
 
 ##############################   Geometry   #############################
 
@@ -148,34 +150,84 @@ for i in range(1, N_part):
     )
     s1.unsetPrimaryObject()
 
+# def surface_normal_rz(r, z, a, c, n, eps=1e-12):
+#     p = 0.5 * float(n)   # p = n/2
+#     ra = max(r / a, eps)
+#     zc = max(z / c, eps)
+#     nr = (p / a) * (ra ** (p - 1.0))
+#     nz = (p / c) * (zc ** (p - 1.0))
+#     mag = math.sqrt(nr*nr + nz*nz)
+#     return (nr / mag, nz / mag)
+
 def surface_normal_rz(r, z, a, c, n, eps=1e-12):
-    p = 0.5 * float(n)   # p = n/2
+    # gradient components
+    # clamp to avoid (0)^(negative) when n<1
     ra = max(r / a, eps)
     zc = max(z / c, eps)
-    nr = (p / a) * (ra ** (p - 1.0))
-    nz = (p / c) * (zc ** (p - 1.0))
-    mag = math.sqrt(nr*nr + nz*nz)
-    return (nr / mag, nz / mag)
+    e = 2/n
+    dr = (e / a) * (ra ** (e - 1.0))
+    dz = (e / c) * (zc ** (e - 1.0))
+    mag = math.sqrt(dr*dr + dz*dz)
+    return (dr / mag, dz / mag)   # (n_r, n_z)
 
-theta = math.radians(30.0)   # location on super-ellipse
-delta = 2                 # offset distance for datum points (mm)
+def surface_tangent_rz(r, z, a, c, e, eps=1e-12):
+    n_r, n_z = surface_normal_rz(r, z, a, c, e, eps)
+    # 90° rotation in r–z plane
+    t_r = -n_z
+    t_z =  n_r
+    return (t_r, t_z)
 
-# --- get point on inner surface ---
-r0, z0 = superellipse_rz(theta, r_inner, z_inner, n)
 
-# --- get surface normal ---
-nr, nz = surface_normal_rz(r0, z0, r_inner, z_inner, n)
+N_theta = 6          # number of meridional regions you want
+delta = 2.0 * thick # normal offset distance (safe choice)
 
-# --- compute two points along normal ---
-p_out = (r0 + delta * nr, z0 + delta * nz, 0.0)
-p_in  = (r0, z0, 0.0)
+theta_vals = np.linspace(0.0, math.pi/2.0, N_theta + 1)
 
-# --- create datum points ---
-d1 = p.DatumPointByCoordinate(coords=p_out)
-d2 = p.DatumPointByCoordinate(coords=p_in)
+# use interior midpoints only
+theta_cut_vals = [
+    0.5 * (theta_vals[i] + theta_vals[i+1])
+    for i in range(len(theta_vals) - 1)
+]
+
+for i, theta in enumerate(theta_cut_vals):
+    # --- point on mid-thickness surface ---
+    r0, z0 = superellipse_rz(
+        theta,
+        r_inner,
+        z_inner,
+        n
+    )
+    # --- surface normal at that point ---
+    nr, nz = surface_normal_rz(
+        r0, z0,
+        r_inner, z_inner,
+        n
+    )
+    # -- points along the normal ---
+    p_out = (r0 + delta * nr, z0 + delta * nz, 0.0)
+    p_mid = (r0, z0, 0.0)
+    p_in  = (r0 - delta * nr, z0 - delta * nz, 0.0)
+    # --- datum points ---
+    d1 = p.DatumPointByCoordinate(coords=p_out)
+    d2 = p.DatumPointByCoordinate(coords=p_in)
+    d3 = p.DatumPointByCoordinate(coords=p_mid)
+    # --- shortest-path partition ---
+    faces = p.faces.getByBoundingBox(
+    xMin=-1e6, yMin=-1e6, zMin=-1e6,
+    xMax=+1e6, yMax=+1e6, zMax=+1e6)
+    p.PartitionFaceByShortestPath(
+        faces=faces,
+        point1=p.datums[d1.id],
+        point2=p.datums[d2.id]
+    )
+    print("Created normal partition at theta = %.2f deg" %
+          math.degrees(theta))
+
 
 
 #################### Material properties ####################
+mdb.models['EllipseModel_2D'].parts['SuperEllipsoid_2D'].setValues(
+    geometryRefinement=FINE)
 mdb.models[modelName].Material(name='AL')
 mdb.models[modelName].materials['AL'].Elastic(
     temperatureDependency=ON, 
@@ -234,9 +286,12 @@ p = mdb.models[modelName].parts['SuperEllipsoid_2D']
 a.Instance(name='SuperEllipsoid_2D-1', part=p, dependent=ON)
 
 ################ Step Creation ###################
-mdb.models[modelName].CoupledTempDisplacementStep(name='LoadingStep', 
-    previous='Initial', description='LoadingStep', response=STEADY_STATE, 
-    deltmx=None, cetol=None, creepIntegration=None, amplitude=RAMP)
+# mdb.models[modelName].CoupledTempDisplacementStep(name='LoadingStep', 
+#     previous='Initial', description='LoadingStep', response=STEADY_STATE, 
+#     deltmx=None, cetol=None, creepIntegration=None, amplitude=RAMP)
+
+mdb.models[modelName].StaticStep(name='LoadingStep', previous='Initial', 
+    initialInc=1, minInc=1e-05, maxInc=1.0)
 
 ################# SET creation ###################
 
@@ -267,3 +322,193 @@ theta0_edges = unique(theta0_edges)
 theta90_edges = unique(theta90_edges)
 p.Set(name='set_bottom', edges=theta0_edges)
 p.Set(name='set_top', edges=theta90_edges)
+
+################# Surface creation ###################
+N_sample = 40   # more than enough
+theta_vals = np.linspace(0.0, math.pi/2.0, N_sample+2)[1:-1]
+
+s2 = p.edges
+
+search_tol = 1e-3          # start reasonably large
+eps_theta = 1e-6            # avoid theta = 0, pi/2
+edge_combined = []
+for theta in theta_vals:
+    # avoid boundaries
+    if theta < eps_theta or theta > math.pi/2 - eps_theta:
+        continue
+    # point on inner surface
+    r0, z0 = superellipse_rz(theta, r_outer, z_outer, n)
+    pt = (r0, z0, 0.0)
+    found = s2.getClosest(
+        coordinates=(pt,),
+        searchTolerance=search_tol
+    )
+    if found:
+        face_pt = found[0][1]
+        seq_face = s2.findAt((face_pt,),)
+        if seq_face:
+            edge_combined.append(seq_face)
+
+# --- Combine faces into one surface ---
+if edge_combined:
+    p.Surface(side1Edges=tuple(edge_combined), name='flux_Load')
+else:
+    print("No faces found for surface creation.")
+
+edge_combined = []
+for theta in theta_vals:
+    # avoid boundaries
+    if theta < eps_theta or theta > math.pi/2 - eps_theta:
+        continue
+    # point on inner surface
+    r0, z0 = superellipse_rz(theta, r_inner, z_inner, n)
+    pt = (r0, z0, 0.0)
+    found = s2.getClosest(
+        coordinates=(pt,),
+        searchTolerance=search_tol
+    )
+    if found:
+        face_pt = found[0][1]
+        seq_face = s2.findAt((face_pt,),)
+        if seq_face:
+            edge_combined.append(seq_face)
+
+# --- Combine faces into one surface ---
+if edge_combined:
+    p.Surface(side1Edges=tuple(edge_combined), name='Surf_Load')
+else:
+    print("No faces found for surface creation.")
+
+################# Loading ###################
+a1 = mdb.models['EllipseModel_2D'].rootAssembly
+region = a1.instances['SuperEllipsoid_2D-1'].surfaces['Surf_Load']
+mdb.models['EllipseModel_2D'].Pressure(name='Press_load', 
+    createStepName='LoadingStep', region=region, distributionType=UNIFORM, 
+    field='', magnitude=Press, amplitude=UNSET)
+
+region = a1.instances['SuperEllipsoid_2D-1'].sets['set_bottom']
+mdb.models['EllipseModel_2D'].YsymmBC(name='Bottom', createStepName='Initial', 
+    region=region, localCsys=None)
+
+region = a1.instances['SuperEllipsoid_2D-1'].sets['set_top']
+mdb.models['EllipseModel_2D'].XsymmBC(name='Top', createStepName='Initial', 
+    region=region, localCsys=None)
+
+################# MESHING ###################
+p = mdb.models['EllipseModel_2D'].parts['SuperEllipsoid_2D']
+p.seedPart(size=mesh_size, deviationFactor=0.01, minSizeFactor=0.1)
+elemType1 = mesh.ElemType(elemCode=CGAX8R, elemLibrary=STANDARD)
+faces1 = p.faces.getByBoundingBox(
+    xMin=-1e6, yMin=-1e6, zMin=-1e6,
+    xMax=+1e6, yMax=+1e6, zMax=+1e6
+)
+pickedRegions = (faces1,)
+p.setElementType(regions=pickedRegions, elemTypes=(elemType1,))
+p.generateMesh()
+
+################# JOB Creation ###################
+job = mdb.Job(name='Job-1', model='EllipseModel_2D', description='', type=ANALYSIS, 
+        atTime=None, waitMinutes=0, waitHours=0, queue=None, memory=90, 
+        memoryUnits=PERCENTAGE, getMemoryFromAnalysis=True, 
+        explicitPrecision=SINGLE, nodalOutputPrecision=SINGLE, echoPrint=OFF, 
+        modelPrint=OFF, contactPrint=OFF, historyPrint=OFF, userSubroutine='', 
+        scratch='C:\\abaqus_tmp', resultsFormat=ODB, numThreadsPerMpiProcess=0, numCpus=6, 
+        numDomains=6, numGPUs=0)
+job.submit(consistencyChecking=OFF)
+job.waitForCompletion()
+
+######## local coordinate system  ##########
+# elem = p.elements[0]        # just one element
+# elemLabel = elem.label
+
+# node_ids = elem.connectivity
+# coords = [p.nodes[i].coordinates for i in node_ids]
+
+# node_ids = elem.connectivity
+# coords = [p.nodes[i].coordinates for i in node_ids]
+
+# r = [c[0] for c in coords]   # X = radial (r)
+# z = [c[1] for c in coords]   # Y = axial  (z)
+
+# node_ids = elem.connectivity
+# coords = [p.nodes[i].coordinates for i in node_ids]
+
+# r = [c[0] for c in coords]   # X = radial (r)
+# z = [c[1] for c in coords]   # Y = axial  (z)
+
+# r_c = sum(r) / len(r)
+# z_c = sum(z) / len(z)
+
+# n_r, n_z = surface_normal_rz(r_c, z_c, r_inner, z_inner, n)
+
+# # tangent = 90° rotation in r–z plane
+# t_r = -n_z
+# t_z =  n_r
+
+# d1csys = p.DatumCsysByThreePoints(
+#     name='CSYS_ELEM_%d' % elemLabel,
+#     coordSysType=CARTESIAN,
+#     origin=(r_c, z_c, 0.0),
+#     point1=(r_c + t_r, z_c + t_z, 0.0),   # X = tangent
+#     point2=(r_c + n_r, z_c + n_z, 0.0)    # Y = normal
+# )
+
+# elemSet = p.SetFromElementLabels(
+#     name='ONE_ELEM_SET',
+#     elementLabels=(elemLabel,)
+# )
+
+# p.MaterialOrientation(
+#     region=elemSet,
+#     orientationType=SYSTEM,
+#     localCsys=p.datums[d1csys.id],
+#     axis=AXIS_3,
+#     angle=0.0,
+#     additionalRotationType=ROTATION_ANGLE,
+#     stackDirection=STACK_3
+# )
+
+for elem in p.elements:
+    elemLabel = elem.label
+    # --- element node coordinates ---
+    node_ids = elem.connectivity
+    coords = [p.nodes[i].coordinates for i in node_ids]
+    r = [c[0] for c in coords]   # radial
+    z = [c[1] for c in coords]   # axial
+    # --- element centroid ---
+    r_c = sum(r) / len(r)
+    z_c = sum(z) / len(z)
+    # --- surface normal at centroid ---
+    n_r, n_z = surface_normal_rz(
+        r_c, z_c,
+        r_inner, z_inner,
+        n
+    )
+    # --- tangent (90° rotation) ---
+    t_r = -n_z
+    t_z =  n_r
+    # --- create local CSYS ---
+    dcsys = p.DatumCsysByThreePoints(
+        name='CSYS_ELEM_%d' % elemLabel,
+        coordSysType=CARTESIAN,
+        origin=(r_c, z_c, 0.0),
+        point1=(r_c + t_r, z_c + t_z, 0.0),   # X = tangent
+        point2=(r_c + n_r, z_c + n_z, 0.0)    # Y = normal
+    )
+    # --- element set ---
+    elemSet = p.SetFromElementLabels(
+        name='ELEM_SET_%d' % elemLabel,
+        elementLabels=(elemLabel,)
+    )
+    # --- assign material orientation ---
+    p.MaterialOrientation(
+        region=elemSet,
+        orientationType=SYSTEM,
+        localCsys=p.datums[dcsys.id],
+        axis=AXIS_3,
+        angle=0.0,
+        additionalRotationType=ROTATION_ANGLE,
+        stackDirection=STACK_3
+    )
+
+# print("Assigned material orientation to", len(p.elements), "elements.")

@@ -23,7 +23,7 @@ import numpy as np
 import math as math
 import os
 
-path_modules = 'D:\\psingh\\MT\\ABAQUS\\MT'
+path_modules = 'U:\\Sachdeva\\MT_Nair\\ABAQUS\\MT'
 os.chdir(path_modules)
 # Input:
 
@@ -140,9 +140,9 @@ for element in skinPart.elements:
     nodalConnect=element.connectivity
     # convert the tuple to a list:
     nNodes=len(nodalConnect)
-    x=range(nNodes)
-    y=range(nNodes)
-    z=range(nNodes)
+    x = [0.0]*nNodes
+    y = [0.0]*nNodes
+    z = [0.0]*nNodes
     j=-1
     for i in nodalConnect:
         j=j+1
