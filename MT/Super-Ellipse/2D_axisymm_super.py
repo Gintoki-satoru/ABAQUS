@@ -59,14 +59,14 @@ myModel = mdb.models[modelName]
 
 #############################   PARAMETERS    #############################
 
-r_inner = 200     # semi-axis in a
-z_inner = 100     # semi-axis in c
-thick   = 1
+r_inner = 131.73     # semi-axis in a
+z_inner = 658.63     # semi-axis in c
+thick   = 1.769
 
 r_outer = r_inner + thick
 z_outer = z_inner + thick
 
-n = 1.0         # superellipse exponent
+n = 0.8         # superellipse exponent
 
 n_spline = 80  # number of spline points
 N_theta = 6   # number of meridional regions
@@ -75,7 +75,7 @@ plyAngle = [0, 45, 60, 90]
 
 mesh_size = 0.5  # Mesh size
 
-Press = 1 # Pressure load
+Press = 0.1 # Pressure load
 compositeMaterialName = 'cfk'  # 'cfk', 'AL', 'gfk', 'cfknew'
 
 ##############################   Geometry   #############################
@@ -189,6 +189,8 @@ theta_cut_vals = [
     0.5 * (theta_vals[i] + theta_vals[i+1])
     for i in range(len(theta_vals) - 1)
 ]
+# val = (89 / 90.0) * (math.pi / 2.0)
+# theta_cut_vals.append(val)
 
 for i, theta in enumerate(theta_cut_vals):
     # --- point on mid-thickness surface ---
@@ -774,6 +776,8 @@ for elem in p.elements:
 
 session.viewports['Viewport: 1'].partDisplay.geometryOptions.setValues(
     datumCoordSystems=OFF)
+session.viewports['Viewport: 1'].assemblyDisplay.geometryOptions.setValues(
+datumCoordSystems=OFF)
 
 ################# JOB Creation ###################
 job = mdb.Job(name='Job-1', model='EllipseModel_2D', description='', type=ANALYSIS, 
