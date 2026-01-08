@@ -11,6 +11,8 @@ import operator
 
 from abaqus import *
 from abaqusConstants import *
+from __future__ import print_function
+from odbAccess import openOdb
 #session.setValues(kernelMemoryLimit=16384)
 import section
 import regionToolset
@@ -59,25 +61,32 @@ myModel = mdb.models[modelName]
 
 #############################   PARAMETERS    #############################
 
-r_inner = 131.73     # semi-axis in a
-z_inner = 658.63     # semi-axis in c
-thick   = 1.769
+r_inner = 241.09     # semi-axis in a
+z_inner = 241.09     # semi-axis in c
+
+n = 1.0         # superellipse exponent
+
+n_spline = 80  # number of spline points
+N_theta = 6   # number of meridional regions
+
+plyAngle = [0, 45, -45, 90, 0, 45, -45, 90, 0, 45, -45, 90, 0, 45, -45, 90, 90, -45, 45, 0, 90, -45, 45, 0, 90, -45, 45, 0, 90, -45, 45, 0]  # stacking sequence (degrees)
+thick   = 0.15*plyAngle.__len__()  # total thickness
+N_part = plyAngle.__len__()  # number of partitions through thickness
 
 r_outer = r_inner + thick
 z_outer = z_inner + thick
 
-n = 0.8         # superellipse exponent
+mesh_size = 0.55  # Mesh size
 
-n_spline = 80  # number of spline points
-N_theta = 6   # number of meridional regions
-N_part = 4    # Number of partitions
-plyAngle = [0, 45, 60, 90]
+Press = 1.0 # Pressure load
+compositeMaterialName = 'car_epx'  # 'cfk', 'AL', 'gfk', 'cfknew', 'car_epx'
 
-mesh_size = 0.5  # Mesh size
-
-Press = 0.1 # Pressure load
-compositeMaterialName = 'cfk'  # 'cfk', 'AL', 'gfk', 'cfknew'
-
+# Strength parameters
+Xt = 2323.5    # Longitudinal tensile strength
+Yt = 62.3      # Transverse tensile strength
+Xc = -1017.5    # Longitudinal compressive strength
+Yc = -253.7     # Transverse compressive strength
+S = 89.6       # Shear strength
 ##############################   Geometry   #############################
 
 s = myModel.ConstrainedSketch(
@@ -96,8 +105,7 @@ def superellipse_rz(theta, a, c, n):
     z = c * (math.sin(theta) ** (n))
     return r, z
 
-
-theta_vals = np.linspace(0.0, math.pi/2.0, n_spline)
+theta_vals = np.linspace(0.0, (math.pi / 2.0), n_spline)
 
 inner_pts = []
 outer_pts = []
@@ -189,7 +197,7 @@ theta_cut_vals = [
     0.5 * (theta_vals[i] + theta_vals[i+1])
     for i in range(len(theta_vals) - 1)
 ]
-# val = (89 / 90.0) * (math.pi / 2.0)
+# val = (88 / 90.0) * (math.pi / 2.0)
 # theta_cut_vals.append(val)
 
 for i, theta in enumerate(theta_cut_vals):
@@ -394,6 +402,13 @@ elif compositeMaterialName == 'gfk':
 	G12, G13, G23 = 3080.5, 3449.0, 3080.5
 	alpha11,alpha22,alpha33=2.6e-5,8.6e-6,2.6e-5
 	dsingle = 0.190
+elif compositeMaterialName == 'car_epx':
+	E1, E2, E3 = 11380, 161000, 11380
+	Nu21, Nu13, Nu23 = 0.32, 0.45, 0.32
+	Nu12=E1/E2*Nu21
+	G12, G13, G23 = 5200, 3900, 5200
+	alpha11,alpha22,alpha33=2.88e-5,-9e-7,2.88e-5
+	dsingle = 0.15
 elif compositeMaterialName == 'cfknew':
 	# Material coordinate system REDEFINED for STACK_3 compatibility:
 	# Global X = radial (r, thickness/stacking) → Material 3 (STACK_3)
@@ -405,18 +420,15 @@ elif compositeMaterialName == 'cfknew':
 	# Axis 2 = hoop (circumferential, E2 = 10000 MPa)
 	# Axis 3 = radial (through-thickness, E3 = 10000 MPa) ← STACK direction
 	E1, E2, E3 = 147000.0, 10000.0, 10000.0
-	
 	# Poisson's ratios - MUST satisfy reciprocity: ν_ij/E_i = ν_ji/E_j
 	# For transversely isotropic material (E2 = E3, fiber in direction 1):
 	Nu23 = 0.35  # In-plane transverse Poisson's ratio (hoop-radial), symmetric since E2=E3
 	Nu12 = 0.27  # Hoop contraction when loaded in fiber direction
 	Nu13 = 0.27  # Radial contraction when loaded in fiber direction (same as Nu12 due to E2=E3)
-	
 	# Reciprocal Poisson's ratios (calculated by Abaqus):
 	# Nu21 = Nu12 * E2/E1 = 0.27 * 10000/147000 = 0.0184 (transverse contracts little when fiber loaded)
 	# Nu31 = Nu13 * E3/E1 = 0.27 * 10000/147000 = 0.0184 (same as Nu21)
 	# Nu32 = Nu23 * E3/E2 = 0.35 * 10000/10000 = 0.35 (symmetric, E2=E3)
-	
 	G12, G13, G23 = 7000.0, 7000.0, 3700.0  # G12, G13 = fiber-direction shear; G23 = in-plane shear
 	alpha11,alpha22,alpha33=-1.0e-6,2.6e-5,2.6e-5  # α11=FIBER/axial, α22=hoop, α33=radial
 	dsingle = 0.7
@@ -724,6 +736,9 @@ def layer_mid_delta(k, thick, N_part):
 #     stackDirection=STACK_3
 # )
 
+r_cutoff = 4.0
+exclude_elems = set()
+
 for elem in p.elements:
     elemLabel = elem.label
     # --- element centroid ---
@@ -733,6 +748,8 @@ for elem in p.elements:
     z = [c[1] for c in coords]
     r_c = sum(r) / len(r)
     z_c = sum(z) / len(z)
+    if r_c < r_cutoff:
+        exclude_elems.add(elemLabel)
     # --- solve for thickness offset ---
     delta = solve_delta_for_point(
         r_c, z_c,
@@ -774,6 +791,11 @@ for elem in p.elements:
         stackDirection=STACK_3
     )
 
+p.SetFromElementLabels(
+    name='EXCLUDE_TS_WU',
+    elementLabels=list(exclude_elems)
+)
+
 session.viewports['Viewport: 1'].partDisplay.geometryOptions.setValues(
     datumCoordSystems=OFF)
 session.viewports['Viewport: 1'].assemblyDisplay.geometryOptions.setValues(
@@ -789,3 +811,73 @@ job = mdb.Job(name='Job-1', model='EllipseModel_2D', description='', type=ANALYS
         numDomains=6, numGPUs=0)
 job.submit(consistencyChecking=OFF)
 job.waitForCompletion()
+
+################# POST-PROCESSING ###################
+odbPath = 'Job-1.odb'
+
+H1  = (1.0 / Xt) - (1.0 / Xc)
+H2  = (1.0 / Yt) - (1.0 / Yc)
+H11 = 1.0 / (Xt * Xc)
+H22 = 1.0 / (Yt * Yc)
+H6  = 0.0
+H66 = 1.0 / (S * S)
+H12 = -0.5 * math.sqrt(H11 * H22)
+
+def tsai_wu_index(s1, s2, t12):
+    return (H1*s1 + H2*s2 + H6*t12 +
+            H11*s1*s1 + H22*s2*s2 + H66*t12*t12 +
+            2.0*H12*s1*s2)
+
+def main():
+    odb = openOdb(odbPath, readOnly=True)
+    stepName = list(odb.steps.keys())[-1]
+    step = odb.steps[stepName]
+    frameIndex = -1
+    frame = step.frames[frameIndex]
+    if 'S' not in frame.fieldOutputs:
+        raise RuntimeError("Stress output 'S' not found in ODB frame. Make sure you requested stresses.")
+    Sfield = frame.fieldOutputs['S']
+    base = os.path.splitext(os.path.basename(odbPath))[0]
+    out_csv = 'tsaiwu_%s_axisym.csv' % base
+    with open(out_csv, 'w', newline='') as f:
+        w = csv.writer(f)
+        w.writerow([
+            'odb','step','frameIndex','frameValue',
+            'instance','elementLabel','integrationPoint','sectionPoint',
+            'S_rr(S11)','S_zz(S22)','S_tt(S33)','T_rz(S12)',
+            'TW_rr_zz_rz','fails_rr_zz_rz(>=1)'
+        ])
+        max_tw_rz = -1.0
+        max_tw_elem = None
+        max_tw_ip = None
+        for v in Sfield.values:
+            if v.elementLabel in exclude_elems:
+                continue
+            # Axisymmetric stress components from Abaqus
+            s11 = float(v.data[0])  # rr
+            s22 = float(v.data[1])  # zz
+            s33 = float(v.data[2])  # theta-theta
+            s12 = float(v.data[3]) if len(v.data) > 3 else 0.0  # rz shear
+            s23 = 0  # theta-z shear (not in axisym)
+            tw_rz = tsai_wu_index(s22, s33, s23)
+            fail_rz = 1 if tw_rz >= 1.0 else 0
+            if tw_rz > max_tw_rz:
+                max_tw_rz = tw_rz
+                max_tw_elem = v.elementLabel
+                max_tw_ip = getattr(v, 'integrationPoint', '')
+            inst_name = v.instance.name if hasattr(v, 'instance') and v.instance else ''
+            ip = getattr(v, 'integrationPoint', '')
+            sp = getattr(v, 'sectionPoint', '')
+            w.writerow([
+                base, step.name, frameIndex, frame.frameValue,
+                inst_name, v.elementLabel, ip, sp,
+                s11, s22, s33, s12,
+                tw_rz, fail_rz,
+            ])
+    odb.close()
+    print("Wrote:", out_csv)
+    print("Max Tsai–Wu (tw_rz): %.4f" % max_tw_rz)
+    print("  Element label :", max_tw_elem)
+    print("  Integration pt:", max_tw_ip)
+
+main()
