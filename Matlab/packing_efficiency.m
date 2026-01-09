@@ -25,7 +25,7 @@ function plot_packing_n1_n2_range()
     % -----------------------------
     % Define exponent range
     % -----------------------------
-    n_range = 0.4 : 0.1 : 2;       % from 1 to 2
+    n_range = 0.1 : 0.1 : 1;       % from 1 to 2
     n1_vals = n_range;
     n2_vals = n_range;
 
@@ -75,3 +75,37 @@ end
 % -----------------------------
 
 plot_packing_n1_n2_range();
+
+%%
+
+% Geometry (can be arbitrary since efficiency is shape-only)
+a = 1;
+b = 1;
+c = 1;
+
+% Fixed exponent
+n2 = 1;
+
+% Vary n1
+n1_vals = linspace(1, 0.1, 100);
+
+% Preallocate
+packing_eff = zeros(size(n1_vals));
+
+% Bounding box volume
+V_box = 8 * a * b * c;
+
+% Loop over n1
+for i = 1:length(n1_vals)
+    n1 = n1_vals(i);
+    V_se = superellipsoid_volume(a, b, c, n1, n2);
+    packing_eff(i) = V_se / V_box;
+end
+
+% Plot
+figure;
+plot(n1_vals, packing_eff, 'LineWidth', 2);
+xlabel('n_1');
+ylabel('Packing Efficiency');
+title('Packing Efficiency vs n_1 (n_2 = 1)');
+grid on;

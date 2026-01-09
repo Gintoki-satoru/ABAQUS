@@ -218,12 +218,12 @@ view(35, 20);
 camlight; lighting gouraud;
 
 %% ===== Super-Ellipsoid Parameters =====
-a = 100;
-b = 100;
-c = 200;
+a = 1;
+b = 1;
+c = 1;
 
-n1 = 0.2;   % exponent along u
-n2 = 0.2;   % exponent along v
+n1 = 0.1;   % exponent along u
+n2 = 1;   % exponent along v
 
 signed_power = @(base, exp) sign(base) .* (abs(base).^exp);
 
@@ -232,9 +232,9 @@ N = 120;
 [u, v] = meshgrid(linspace(-pi, pi, N), linspace(-pi/2, pi/2, N));
 
 % ===== Super-Ellipsoid Parametric Surface =====
-X = a * signed_power(cos(v), n2) .* signed_power(cos(u), n1);
-Y = b * signed_power(cos(v), n2) .* signed_power(sin(u), n1);
-Z = c * signed_power(sin(v), n2);
+X = a * signed_power(cos(v), n1) .* signed_power(cos(u), n2);
+Y = b * signed_power(cos(v), n1) .* signed_power(sin(u), n2);
+Z = c * signed_power(sin(v), n1);
 
 % ===== Compute Bounding Box (tight) =====
 xmin = min(X(:));  xmax = max(X(:));
