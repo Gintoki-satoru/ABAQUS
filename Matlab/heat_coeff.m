@@ -9,7 +9,7 @@ hc_mm = hc/1e6;      % W/mm^2-K
 R2 = 1 / (A * hc_mm);
 
 % INSULATION
-k_eff_mW = 0.0303;        % mW/mmK
+k_eff_mW = 0.0303;        % mW/mK
 k_eff = k_eff_mW * 1e-6;  % W/mmK
 S_ins = 67003.022;  % mm
 G1 = k_eff * S_ins;

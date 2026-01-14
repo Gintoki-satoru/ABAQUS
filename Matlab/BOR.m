@@ -10,7 +10,7 @@ n2  = 1;
 t_ins   = 16;
 t_outer = 2;
 
-k_liner = 0.0306;        % W/mm-K
+k_liner = 0.000156;        % W/mm-K
 k_outer = 0.123;        % W/mm-K
 k_ins   = 3.03e-08;      % W/mm-K
 

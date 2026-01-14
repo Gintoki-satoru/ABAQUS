@@ -12,6 +12,7 @@ import operator
 from abaqus import *
 from abaqusConstants import *
 from __future__ import print_function
+from abaqusConstants import ELEMENT_NODAL
 from odbAccess import openOdb
 #session.setValues(kernelMemoryLimit=16384)
 import section
@@ -61,24 +62,24 @@ myModel = mdb.models[modelName]
 
 #############################   PARAMETERS    #############################
 
-r_inner = 241.09     # semi-axis in a
-z_inner = 241.09     # semi-axis in c
+r_inner = 200     # semi-axis in a
+z_inner = 200     # semi-axis in c
 
-n = 1.0         # superellipse exponent
+n = 1         # superellipse exponent
 
-n_spline = 80  # number of spline points
-N_theta = 6   # number of meridional regions
+n_spline = 150  # number of spline points
+N_theta = 10   # number of meridional regions
 
-plyAngle = [0, 45, -45, 90, 0, 45, -45, 90, 0, 45, -45, 90, 0, 45, -45, 90, 90, -45, 45, 0, 90, -45, 45, 0, 90, -45, 45, 0, 90, -45, 45, 0]  # stacking sequence (degrees)
+plyAngle = [60, -30, -60, 30]  # stacking sequence (degrees)
 thick   = 0.15*plyAngle.__len__()  # total thickness
 N_part = plyAngle.__len__()  # number of partitions through thickness
 
 r_outer = r_inner + thick
 z_outer = z_inner + thick
 
-mesh_size = 0.55  # Mesh size
+mesh_size = 0.25  # Mesh size
 
-Press = 1.0 # Pressure load
+Press = 0.1 # Pressure load
 compositeMaterialName = 'car_epx'  # 'cfk', 'AL', 'gfk', 'cfknew', 'car_epx'
 
 # Strength parameters
@@ -151,7 +152,7 @@ r_pick, z_pick = superellipse_rz(
 f = p.faces
 pickedFaces = f.findAt(((r_pick, z_pick, 0.0),))
 
-theta_vals = np.linspace(0.0, math.pi/2.0, 30)
+theta_vals = np.linspace(0.0, math.pi/2.0, 150)
 
 for i in range(1, N_part):
 
@@ -835,49 +836,46 @@ def main():
     frameIndex = -1
     frame = step.frames[frameIndex]
     if 'S' not in frame.fieldOutputs:
-        raise RuntimeError("Stress output 'S' not found in ODB frame. Make sure you requested stresses.")
-    Sfield = frame.fieldOutputs['S']
+        raise RuntimeError("Stress output 'S' not found in ODB frame.")
+    Sfield = frame.fieldOutputs['S'].getSubset(position=ELEMENT_NODAL)
     base = os.path.splitext(os.path.basename(odbPath))[0]
-    out_csv = 'tsaiwu_%s_axisym.csv' % base
+    out_csv = 'tsaiwu_%s_axisym_elementNodal.csv' % base
     with open(out_csv, 'w', newline='') as f:
         w = csv.writer(f)
         w.writerow([
             'odb','step','frameIndex','frameValue',
-            'instance','elementLabel','integrationPoint','sectionPoint',
+            'instance','elementLabel','nodeLabel',
             'S_rr(S11)','S_zz(S22)','S_tt(S33)','T_rz(S12)',
-            'TW_rr_zz_rz','fails_rr_zz_rz(>=1)'
+            'TW_zz_tt','fails(>=1)'
         ])
-        max_tw_rz = -1.0
-        max_tw_elem = None
-        max_tw_ip = None
+        max_tw = -1.0
+        max_elem = None
+        max_node = None
         for v in Sfield.values:
             if v.elementLabel in exclude_elems:
                 continue
-            # Axisymmetric stress components from Abaqus
             s11 = float(v.data[0])  # rr
             s22 = float(v.data[1])  # zz
             s33 = float(v.data[2])  # theta-theta
-            s12 = float(v.data[3]) if len(v.data) > 3 else 0.0  # rz shear
-            s23 = 0  # theta-z shear (not in axisym)
-            tw_rz = tsai_wu_index(s22, s33, s23)
-            fail_rz = 1 if tw_rz >= 1.0 else 0
-            if tw_rz > max_tw_rz:
-                max_tw_rz = tw_rz
-                max_tw_elem = v.elementLabel
-                max_tw_ip = getattr(v, 'integrationPoint', '')
-            inst_name = v.instance.name if hasattr(v, 'instance') and v.instance else ''
-            ip = getattr(v, 'integrationPoint', '')
-            sp = getattr(v, 'sectionPoint', '')
+            s12 = float(v.data[3]) if len(v.data) > 3 else 0.0
+            s23 = 0.0
+            tw = tsai_wu_index(s22, s33, s23)
+            fail = 1 if tw >= 1.0 else 0
+            if tw > max_tw:
+                max_tw = tw
+                max_elem = v.elementLabel
+                max_node = v.nodeLabel
+            inst_name = v.instance.name if v.instance else ''
             w.writerow([
                 base, step.name, frameIndex, frame.frameValue,
-                inst_name, v.elementLabel, ip, sp,
+                inst_name, v.elementLabel, v.nodeLabel,
                 s11, s22, s33, s12,
-                tw_rz, fail_rz,
+                tw, fail
             ])
     odb.close()
     print("Wrote:", out_csv)
-    print("Max Tsai–Wu (tw_rz): %.4f" % max_tw_rz)
-    print("  Element label :", max_tw_elem)
-    print("  Integration pt:", max_tw_ip)
+    print("Max Tsai–Wu (ELEMENT_NODAL): %.4f" % max_tw)
+    print("  Element label :", max_elem)
+    print("  Node label    :", max_node)
 
 main()
