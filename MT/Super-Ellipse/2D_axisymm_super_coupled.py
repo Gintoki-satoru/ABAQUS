@@ -38,13 +38,19 @@ import math
 import csv
 
 
-# path_modules = 'U:\\Sachdeva\\MT_Nair\\ABAQUS\\MT\\Macros'
-# # path_modules = 'D:\\psingh\\MT\\ABAQUS\\MT\\Macros'
-# # path_modules = r"C:\Users\lenovo\Desktop\Aerospace\Thesis\ABAQUS\MT\Macros"
-# if path_modules not in sys.path:
-#     sys.path.append(path_modules)
+path_modules = 'U:\\Sachdeva\\MT_Nair\\ABAQUS\\MT\\Super-Ellipse'
+# path_modules = r"C:\Users\lenovo\Desktop\Aerospace\Thesis\ABAQUS\MT\Macros"
+if path_modules not in sys.path:
+    sys.path.append(path_modules)
 
+import Heat_coeff
 
+from Heat_coeff import (
+    superellipsoid_area,
+    superellipsoid_volume,
+    shape_factor,
+    equivalent_heat_coeff
+)
 
 session.journalOptions.setValues(replayGeometry=COORDINATE, recoverGeometry=COORDINATE)
 
@@ -70,7 +76,7 @@ n = 1         # superellipse exponent
 n_spline = 150  # number of spline points
 N_theta = 10   # number of meridional regions
 
-plyAngle = [60, -30, -60, 30]  # stacking sequence (degrees)
+plyAngle = [0, 90]  # stacking sequence (degrees)
 thick   = 0.15*plyAngle.__len__()  # total thickness
 N_part = plyAngle.__len__()  # number of partitions through thickness
 
@@ -79,8 +85,8 @@ z_outer = z_inner + thick
 
 mesh_size = 0.25  # Mesh size
 
-Press = 0.1 # Pressure load
-compositeMaterialName = 'car_epx'  # 'cfk', 'AL', 'gfk', 'cfknew', 'car_epx'
+Press = 0.75 # Pressure load
+compositeMaterialName = 'car_epx'  # 'cfk', 'AL', 'gfk', 'cfknew', 'car_epx', 'im7_epx'
 
 # Strength parameters
 Xt = 2323.5    # Longitudinal tensile strength
@@ -88,6 +94,13 @@ Yt = 62.3      # Transverse tensile strength
 Xc = -1017.5    # Longitudinal compressive strength
 Yc = -253.7     # Transverse compressive strength
 S = 89.6       # Shear strength
+
+t_ins = 16                      # insulation thickness                      
+t_outer = 2                     # outer layer thickness
+k_liner = 0.000151               # liner thermal conductivity
+k_outer = 0.0306                # outer layer thermal conductivity
+k_ins = 3.0300e-08              # insulation thermal conductivity
+conv_coeff = 10 / 1e6         # convection coefficient W/mm^2K
 ##############################   Geometry   #############################
 
 s = myModel.ConstrainedSketch(
@@ -396,45 +409,35 @@ if compositeMaterialName == 'cfk':
 	G12, G13, G23 = 7000.0, 3700.0, 7000.0  # G12=radial-fiber, G13=radial-hoop, G23=fiber-hoop
 	alpha11,alpha22,alpha33=2.6e-5,-1.0e-6,2.6e-5  # alpha11=radial, alpha22=FIBER/axial, alpha33=hoop
 	dsingle = 0.35
-elif compositeMaterialName == 'gfk':
-	E1, E2, E3 = 9552.6, 39296.0, 9552.6
-	Nu21, Nu13, Nu23 = 0.29, 0.38, 0.29
-	Nu12=E1/E2*Nu21
-	G12, G13, G23 = 3080.5, 3449.0, 3080.5
-	alpha11,alpha22,alpha33=2.6e-5,8.6e-6,2.6e-5
-	dsingle = 0.190
+elif compositeMaterialName == 'im7_epx':
+    im7_epx_table = [
+        # (T[K], E1, E2, E3, G12, G13, G23, nu21, nu23, nu13, alpha_fiber(2), alpha_trans(1=3))
+        (293.0, 11380.0, 161000.0, 11380.0, 5200.0, 3900.0, 5200.0, 0.32, 0.32, 0.45, -9e-7, 2.88e-5),
+    ]
 elif compositeMaterialName == 'car_epx':
-	E1, E2, E3 = 11380, 161000, 11380
-	Nu21, Nu13, Nu23 = 0.32, 0.45, 0.32
-	Nu12=E1/E2*Nu21
-	G12, G13, G23 = 5200, 3900, 5200
-	alpha11,alpha22,alpha33=2.88e-5,-9e-7,2.88e-5
-	dsingle = 0.15
-elif compositeMaterialName == 'cfknew':
-	# Material coordinate system REDEFINED for STACK_3 compatibility:
-	# Global X = radial (r, thickness/stacking) → Material 3 (STACK_3)
-	# Global Y = axial (z, FIBER at 0°) → Material 1 
-	# Global Z = hoop (θ, circumferential) → Material 2
-	# 
-	# For 0° ply: fibers align with Global Y (axial) = Material axis 1
-	# Axis 1 = axial/FIBER direction (E1 = 147000 MPa) ← STRONG
-	# Axis 2 = hoop (circumferential, E2 = 10000 MPa)
-	# Axis 3 = radial (through-thickness, E3 = 10000 MPa) ← STACK direction
-	E1, E2, E3 = 147000.0, 10000.0, 10000.0
-	# Poisson's ratios - MUST satisfy reciprocity: ν_ij/E_i = ν_ji/E_j
-	# For transversely isotropic material (E2 = E3, fiber in direction 1):
-	Nu23 = 0.35  # In-plane transverse Poisson's ratio (hoop-radial), symmetric since E2=E3
-	Nu12 = 0.27  # Hoop contraction when loaded in fiber direction
-	Nu13 = 0.27  # Radial contraction when loaded in fiber direction (same as Nu12 due to E2=E3)
-	# Reciprocal Poisson's ratios (calculated by Abaqus):
-	# Nu21 = Nu12 * E2/E1 = 0.27 * 10000/147000 = 0.0184 (transverse contracts little when fiber loaded)
-	# Nu31 = Nu13 * E3/E1 = 0.27 * 10000/147000 = 0.0184 (same as Nu21)
-	# Nu32 = Nu23 * E3/E2 = 0.35 * 10000/10000 = 0.35 (symmetric, E2=E3)
-	G12, G13, G23 = 7000.0, 7000.0, 3700.0  # G12, G13 = fiber-direction shear; G23 = in-plane shear
-	alpha11,alpha22,alpha33=-1.0e-6,2.6e-5,2.6e-5  # α11=FIBER/axial, α22=hoop, α33=radial
-	dsingle = 0.7
+    # Temperature-dependent base properties (units: MPa, 1/°C)
+    # Table order: (T, E1, E2, E3, G12, G13, G23, nu21, nu23, nu13, alpha_fiber(2), alpha_trans(1=3))
+    car_epx_table = [
+        # T[K],  E1     E2      E3     G12    G13    G23    nu21   nu23   nu13   a2(×1e-7)   a1(×1e-6)
+        (293.0,  8.53e3, 171e3,  8.53e3, 5.63e3, 2.64e3, 5.63e3, 0.287, 0.287, 0.369, -1.06e-7, 25.8e-6),
+        (193.0, 10.46e3, 172e3, 10.46e3, 8.14e3, 3.46e3, 8.14e3, 0.328, 0.328, 0.369, -0.45e-7, 19.1e-6),
+        (93.0,  13.55e3, 173e3, 13.55e3, 9.31e3, 4.80e3, 9.31e3, 0.389, 0.389, 0.369, -0.51e-7, 11.9e-6),
+    ]
+    car_epx_k_table = [
+    # (T[K], k22_fiber, k11_radial, k33_hoop)
+    (292.0, 0.006317, 0.000632, 0.000632),
+    (70.0,  0.000857, 0.000234, 0.000234),
+    (23.0,  0.000355, 0.000151, 0.000151),
+    ]
 else:
 	pass
+
+if compositeMaterialName == 'car_epx':
+    prop_table = car_epx_table
+elif compositeMaterialName == 'im7_epx':
+    prop_table = im7_epx_table
+else:
+    prop_table = None
 
 def materialComposite():
     """
@@ -453,7 +456,7 @@ def materialComposite():
     - Axis 2 (transverse in-plane) = hoop/θ
     - Axis 3 (through-thickness/STACK) = radial/r (unchanged by rotation)
     """
-    def transform_compliance_axisymmetric(phi_deg):
+    def transform_compliance_axisymmetric(phi_deg, E1, E2, E3, Nu12, Nu13, Nu23, G12, G13, G23):
         """
         Transform compliance matrix for rotation about LOCAL axis 1 (radial/thickness).
         
@@ -508,50 +511,93 @@ def materialComposite():
         # Transform: Sr = T^T * S0 * T
         Sr_phi = np.dot(np.dot(T.T, S0), T)
         
-        return Sr_phi
+        return np.dot(np.dot(T.T, S0), T)
     
     # Create materials for each unique ply angle using transformation
     unique_angles = set(plyAngle)
     print("Creating {} pre-rotated materials in local coordinate system...".format(len(unique_angles)))
     
     for phi in sorted(unique_angles):
-        # Get transformed compliance matrix for this angle
-        Sr_phi = transform_compliance_axisymmetric(phi)
-        
-        # Extract engineering constants from transformed compliance
-        E1_rot = 1.0 / Sr_phi[0, 0]  # Local-1 (radial/thickness direction)
-        E2_rot = 1.0 / Sr_phi[1, 1]  # Local-2 (fiber direction after rotation)
-        E3_rot = 1.0 / Sr_phi[2, 2]  # Local-3 (hoop direction - STACK_3)
-        
-        Nu12_rot = -Sr_phi[1, 0] / Sr_phi[0, 0]
-        Nu13_rot = -Sr_phi[2, 0] / Sr_phi[0, 0]
-        Nu23_rot = -Sr_phi[2, 1] / Sr_phi[1, 1]
-        
-        G12_rot = 1.0 / Sr_phi[5, 5]
-        G13_rot = 1.0 / Sr_phi[4, 4]
-        G23_rot = 1.0 / Sr_phi[3, 3]
-        
-        print("  Angle {}°: E_local1={:.1f}, E_local2={:.1f}, E_local3={:.1f}".format(
-            phi, E1_rot, E2_rot, E3_rot))
-        
-        # Create material with pre-rotated properties in local coordinate system
         material_name = "{}_{:.0f}".format(compositeMaterialName, phi)
         compositeMaterial = myModel.Material(material_name)
-        compositeMaterial.Elastic(type=ENGINEERING_CONSTANTS, table=(
-            (E1_rot, E2_rot, E3_rot,
-             Nu12_rot, Nu13_rot, Nu23_rot,
-             G12_rot, G13_rot, G23_rot),))
-        
-        # Transform thermal expansion for this angle
-        # Rotation in 2-3 plane (axial-hoop), axis 1 (radial) unchanged
-        c = math.cos(math.radians(phi))
-        s = math.sin(math.radians(phi))
-        alpha_1_rot = alpha33  # Radial unchanged (axis 1)
-        alpha_2_rot = alpha11 * c*c + alpha22 * s*s  # Fiber direction (rotates in 2-3 plane)
-        alpha_3_rot = alpha11 * s*s + alpha22 * c*c  # Hoop direction
-        
-        compositeMaterial.Expansion(type=ORTHOTROPIC, table=((alpha_1_rot, alpha_2_rot, alpha_3_rot),))
-        
+        elastic_table = []
+        expansion_table = []
+        # --- loop over temperature rows (for car_epx) ---
+        for (tempK, E1t, E2t, E3t, G12t, G13t, G23t, nu21t, nu23t, nu13t, alpha_fiber, alpha_trans) in prop_table:
+            # reciprocity: nu12 from nu21
+            nu12t = nu21t * (E1t / E2t)
+            # Get transformed compliance for this angle + temperature
+            Sr_phi = transform_compliance_axisymmetric(
+                phi, E1t, E2t, E3t, nu12t, nu13t, nu23t, G12t, G13t, G23t
+            )
+            # Extract engineering constants from transformed compliance
+            E1_rot = 1.0 / Sr_phi[0, 0]
+            E2_rot = 1.0 / Sr_phi[1, 1]
+            E3_rot = 1.0 / Sr_phi[2, 2]
+            Nu12_rot = -Sr_phi[1, 0] / Sr_phi[0, 0]
+            Nu13_rot = -Sr_phi[2, 0] / Sr_phi[0, 0]
+            Nu23_rot = -Sr_phi[2, 1] / Sr_phi[1, 1]
+            G12_rot = 1.0 / Sr_phi[5, 5]
+            G13_rot = 1.0 / Sr_phi[4, 4]
+            G23_rot = 1.0 / Sr_phi[3, 3]
+            # Temperature-dependent elastic constants: temperature is LAST entry
+            elastic_table.append(
+                (E1_rot, E2_rot, E3_rot,
+                Nu12_rot, Nu13_rot, Nu23_rot,
+                G12_rot, G13_rot, G23_rot,
+                tempK)
+            )
+            # ---- thermal expansion: map base values (local axes) then rotate ----
+            # base: alpha11=alpha33=alpha_trans, alpha22=alpha_fiber
+            alpha11_t = alpha_trans
+            alpha22_t = alpha_fiber
+            alpha33_t = alpha_trans
+            c = math.cos(math.radians(phi))
+            s = math.sin(math.radians(phi))
+            alpha_1_rot = alpha11_t
+            alpha_2_rot = alpha22_t * c*c + alpha33_t * s*s
+            alpha_3_rot = alpha22_t * s*s + alpha33_t * c*c
+            # Temperature-dependent expansion: temperature is LAST entry
+            expansion_table.append((alpha_1_rot, alpha_2_rot, alpha_3_rot, tempK))
+        # Create material with temperature-dependent tables
+        if compositeMaterialName == 'car_epx':
+            compositeMaterial.Elastic(
+                type=ENGINEERING_CONSTANTS,
+                temperatureDependency=ON,
+                table=tuple(elastic_table)
+            )
+        else:
+            # temperature-independent (single-row table assumed)
+            compositeMaterial.Elastic(
+                type=ENGINEERING_CONSTANTS,
+                table=(elastic_table[0][:9],)  # strip temperature column
+            )
+        if compositeMaterialName == 'car_epx':
+            compositeMaterial.Expansion(
+                type=ORTHOTROPIC,
+                temperatureDependency=ON,
+                table=tuple(expansion_table)
+            )
+        else:
+            compositeMaterial.Expansion(
+                type=ORTHOTROPIC,
+                table=(expansion_table[0][:3],)
+            )
+        if compositeMaterialName == 'car_epx':
+            k_table = []
+            for (tempK, k22, k11, k33) in car_epx_k_table:
+                # Rotation about axis 1 in 2-3 plane
+                k11_rot = k11
+                k22_rot = k22 * c*c + k33 * s*s
+                k33_rot = k22 * s*s + k33 * c*c
+                # Abaqus ORTHOTROPIC order: (k11, k22, k33, T)
+                k_table.append((k11_rot, k22_rot, k33_rot, tempK))
+            compositeMaterial.Conductivity(
+                type=ORTHOTROPIC,
+                temperatureDependency=ON,
+                table=tuple(k_table)
+            )
+        print("  Angle {}°: created temp-dependent material with {} rows".format(phi, len(elastic_table)))
         # Create section for this material
         section_name = "Composite_Section_{:.0f}".format(phi)
         myModel.HomogeneousSolidSection(name=section_name, material=material_name, thickness=None)
@@ -602,12 +648,12 @@ p = mdb.models[modelName].parts['SuperEllipsoid_2D']
 a.Instance(name='SuperEllipsoid_2D-1', part=p, dependent=ON)
 
 ################ Step Creation ###################
-# mdb.models[modelName].CoupledTempDisplacementStep(name='LoadingStep', 
-#     previous='Initial', description='LoadingStep', response=STEADY_STATE, 
-#     deltmx=None, cetol=None, creepIntegration=None, amplitude=RAMP)
+mdb.models[modelName].CoupledTempDisplacementStep(name='LoadingStep', 
+    previous='Initial', description='LoadingStep', response=STEADY_STATE, 
+    deltmx=None, cetol=None, creepIntegration=None, amplitude=RAMP)
 
-mdb.models[modelName].StaticStep(name='LoadingStep', previous='Initial', 
-    initialInc=1, minInc=1e-05, maxInc=1.0)
+# mdb.models[modelName].StaticStep(name='LoadingStep', previous='Initial', 
+#     initialInc=1, minInc=1e-05, maxInc=1.0)
 
 ################# Loading ###################
 a1 = mdb.models['EllipseModel_2D'].rootAssembly
@@ -623,6 +669,36 @@ mdb.models['EllipseModel_2D'].YsymmBC(name='Bottom', createStepName='Initial',
 region = a1.instances['SuperEllipsoid_2D-1'].sets['set_top']
 mdb.models['EllipseModel_2D'].XsymmBC(name='Top', createStepName='Initial', 
     region=region, localCsys=None)
+
+A_liner = superellipsoid_area(r_inner, r_inner, z_inner, n, 1)
+A_ins = superellipsoid_area(r_inner + thick, r_inner + thick, z_inner + thick, n, 1)
+A_outer = superellipsoid_area(r_inner + thick + t_ins, r_inner + thick + t_ins, z_inner + thick + t_ins, n, 1)#
+A_outer_total = superellipsoid_area(r_inner + thick + t_ins + t_outer, r_inner + thick + t_ins + t_outer, z_inner + thick + t_ins + t_outer, n, 1)
+
+# 2. Compute volume
+V_inner = superellipsoid_volume(r_inner + thick, r_inner + thick, z_inner + thick, n, 1) - superellipsoid_volume(r_inner, r_inner, z_inner, n, 1)
+V_ins = superellipsoid_volume(r_inner + thick + t_ins, r_inner + thick + t_ins, z_inner + thick + t_ins, n, 1) - superellipsoid_volume(r_inner + thick, r_inner + thick, z_inner + thick, n, 1)
+V_outer = superellipsoid_volume(r_inner + thick + t_ins + t_outer, r_inner + thick + t_ins + t_outer, z_inner + thick + t_ins + t_outer, n, 1) - superellipsoid_volume(a + thick + t_ins, r_inner + thick + t_ins, z_inner + thick + t_ins, n, 1)
+
+# 3. Compute shape factors
+S_liner = shape_factor(A_liner, V_inner, thick, r_inner, r_inner, z_inner)
+S_ins   = shape_factor(A_ins,   V_ins, t_ins,   r_inner, r_inner, z_inner)
+S_outer = shape_factor(A_outer, V_outer, t_outer, r_inner, r_inner, z_inner)
+
+# 4. Compute heat transfer coefficient and temperatures
+Q_total, T3, T2, T1, h_eq = equivalent_heat_coeff(
+    T_air=300, T_LH2=20,
+    A_outer=A_outer_total,
+    hc=10,
+    S_ins=S_ins, k_ins=k_ins,
+    S_liner=S_liner, k_liner=k_liner,
+    S_outer=S_outer, k_outer=k_outer,
+    A_outer_liner=A_ins
+)
+region = a1.instances['SuperEllipsoid_2D-1'].surfaces['flux_Load']
+mdb.models['EllipseModel_2D'].SurfaceHeatFlux(name='HeatFlux-1', 
+    createStepName='LoadingStep', region=region, magnitude=Q_total, 
+    distributionType=TOTAL_FORCE)
 
 ################# MESHING ###################
 p = mdb.models['EllipseModel_2D'].parts['SuperEllipsoid_2D']
@@ -829,7 +905,116 @@ def tsai_wu_index(s1, s2, t12):
             H11*s1*s1 + H22*s2*s2 + H66*t12*t12 +
             2.0*H12*s1*s2)
 
-def main():
+def tw_and_tension_strain_limit_element_nodal(strain_limit=0.005):
+    odb = openOdb(odbPath, readOnly=True)
+    stepName = list(odb.steps.keys())[-1]
+    step = odb.steps[stepName]
+    frameIndex = -1
+    frame = step.frames[frameIndex]
+    if 'S' not in frame.fieldOutputs:
+        raise RuntimeError("Stress output 'S' not found in ODB frame. Request stresses (S).")
+    if 'E' not in frame.fieldOutputs:
+        raise RuntimeError("Strain output 'E' not found in ODB frame. Request strains (E).")
+    Sfield = frame.fieldOutputs['S'].getSubset(position=ELEMENT_NODAL)
+    Efield = frame.fieldOutputs['E'].getSubset(position=ELEMENT_NODAL)
+    E_by_key = {}
+    for ev in Efield.values:
+        if 'exclude_elems' in globals() and ev.elementLabel in exclude_elems:
+            continue
+        inst_name = ev.instance.name if ev.instance else ''
+        node_label = getattr(ev, 'nodeLabel', None)
+        if node_label is None:
+            continue
+        e11 = float(ev.data[0])  # rr
+        e22 = float(ev.data[1])  # zz (E22)
+        e33 = float(ev.data[2])  # tt (E33)
+        e12 = float(ev.data[3]) if len(ev.data) > 3 else 0.0
+        E_by_key[(inst_name, ev.elementLabel, node_label)] = (e11, e22, e33, e12)
+    base = os.path.splitext(os.path.basename(odbPath))[0]
+    out_csv = 'tw_tensionStrainLimit_%s_axisym_elementNodal.csv' % base
+    with open(out_csv, 'w', newline='') as f:
+        w = csv.writer(f)
+        w.writerow([
+            'odb','step','frameIndex','frameValue',
+            'instance','elementLabel','nodeLabel',
+            'S_rr(S11)','S_zz(S22)','S_tt(S33)','T_rz(S12)',
+            'E_rr(E11)','E_zz(E22)','E_tt(E33)','E_rz(E12)',
+            'TW_zz_tt','fails_TW(>=1)',
+            'max_tension(E22,E33)','strain_limit','fails_tension_strain(>limit)',
+            'fails_any'
+        ])
+        max_tw = -1.0
+        max_tw_elem = None
+        max_tw_node = None
+        max_tw_inst = ''
+        max_eps_tension = -1.0
+        max_eps_elem = None
+        max_eps_node = None
+        max_eps_inst = ''
+        missing_strain = 0
+        for sv in Sfield.values:
+            if 'exclude_elems' in globals() and sv.elementLabel in exclude_elems:
+                continue
+            inst_name = sv.instance.name if sv.instance else ''
+            node_label = getattr(sv, 'nodeLabel', None)
+            if node_label is None:
+                continue
+            s11 = float(sv.data[0])  # rr
+            s22 = float(sv.data[1])  # zz
+            s33 = float(sv.data[2])  # tt
+            s12 = float(sv.data[3]) if len(sv.data) > 3 else 0.0
+            s23 = 0.0
+            tw = tsai_wu_index(s22, s33, s23)
+            fail_tw = 1 if tw >= 1.0 else 0
+            if tw > max_tw:
+                max_tw = tw
+                max_tw_elem = sv.elementLabel
+                max_tw_node = node_label
+                max_tw_inst = inst_name
+            key = (inst_name, sv.elementLabel, node_label)
+            if key in E_by_key:
+                e11, e22, e33, e12 = E_by_key[key]
+            else:
+                missing_strain += 1
+                e11 = e22 = e33 = e12 = float('nan')
+            if not (math.isnan(e22) or math.isnan(e33)):
+                e22_t = e22 if e22 > 0.0 else 0.0
+                e33_t = e33 if e33 > 0.0 else 0.0
+                max_tension = max(e22_t, e33_t)
+                fail_eps = 1 if (e22 > strain_limit or e33 > strain_limit) else 0
+                if max_tension > max_eps_tension:
+                    max_eps_tension = max_tension
+                    max_eps_elem = sv.elementLabel
+                    max_eps_node = node_label
+                    max_eps_inst = inst_name
+            else:
+                max_tension = float('nan')
+                fail_eps = 0
+            fail_any = 1 if (fail_tw or fail_eps) else 0
+            w.writerow([
+                base, step.name, frameIndex, frame.frameValue,
+                inst_name, sv.elementLabel, node_label,
+                s11, s22, s33, s12,
+                e11, e22, e33, e12,
+                tw, fail_tw,
+                max_tension, strain_limit, fail_eps,
+                fail_any
+            ])
+    odb.close()
+    print("Wrote:", out_csv)
+    if missing_strain:
+        print("WARNING: %d ELEMENT_NODAL stress entries had no matching ELEMENT_NODAL strain entry." % missing_strain)
+    print("Max Tsai–Wu (ELEMENT_NODAL): %.4f" % max_tw)
+    print("  Instance      :", max_tw_inst)
+    print("  Element label :", max_tw_elem)
+    print("  Node label    :", max_tw_node)
+    print("Max tension max(E22+,E33+) (ELEMENT_NODAL): %.6f (limit %.6f)" %
+          (max_eps_tension, strain_limit))
+    print("  Instance      :", max_eps_inst)
+    print("  Element label :", max_eps_elem)
+    print("  Node label    :", max_eps_node)            
+
+def tsai_wu_failure():
     odb = openOdb(odbPath, readOnly=True)
     stepName = list(odb.steps.keys())[-1]
     step = odb.steps[stepName]
@@ -878,4 +1063,62 @@ def main():
     print("  Element label :", max_elem)
     print("  Node label    :", max_node)
 
-main()
+tw_and_tension_strain_limit_element_nodal(strain_limit=0.005)
+
+def plane_strain_limit_check(limit=0.005):
+    """
+    Checks ELEMENT_NODAL strains and flags failure if either E22 or E33 exceeds limit
+    at any element nodal value.
+    """
+    odb = openOdb(odbPath, readOnly=True)
+    stepName = list(odb.steps.keys())[-1]
+    step = odb.steps[stepName]
+    frameIndex = -1
+    frame = step.frames[frameIndex]
+    if 'E' not in frame.fieldOutputs:
+        raise RuntimeError("Strain output 'E' not found in ODB frame. Request strains (E) in your output.")
+    Efield = frame.fieldOutputs['E'].getSubset(position=ELEMENT_NODAL)
+    base = os.path.splitext(os.path.basename(odbPath))[0]
+    out_csv = 'planestrainLimit_%s_axisym_elementNodal.csv' % base
+    with open(out_csv, 'w', newline='') as f:
+        w = csv.writer(f)
+        w.writerow([
+            'odb','step','frameIndex','frameValue',
+            'instance','elementLabel','nodeLabel',
+            'E_rr(E11)','E_zz(E22)','E_tt(E33)','E_rz(E12)',
+            'max(E22,E33)','limit','fail(>limit)'
+        ])
+        global_max = -1.0
+        max_elem = None
+        max_node = None
+        max_inst = ''
+        for v in Efield.values:
+            if 'exclude_elems' in globals() and v.elementLabel in exclude_elems:
+                continue
+            e11 = float(v.data[0])  # rr
+            e22 = float(v.data[1])  # zz  (your E22)
+            e33 = float(v.data[2])  # tt  (your E33)
+            e12 = float(v.data[3]) if len(v.data) > 3 else 0.0  # rz
+            max_inplane = max(e22, e33)
+            fail = 1 if (e22 > limit or e33 > limit) else 0
+            if max_inplane > global_max:
+                global_max = max_inplane
+                max_elem = v.elementLabel
+                max_node = v.nodeLabel
+                max_inst = v.instance.name if v.instance else ''
+            inst_name = v.instance.name if v.instance else ''
+            w.writerow([
+                base, step.name, frameIndex, frame.frameValue,
+                inst_name, v.elementLabel, v.nodeLabel,
+                e11, e22, e33, e12,
+                max_inplane, limit, fail
+            ])
+    odb.close()
+    print("Wrote:", out_csv)
+    print("Global max max(E22,E33): %.6f (limit %.6f)" % (global_max, limit))
+    print("  Instance      :", max_inst)
+    print("  Element label :", max_elem)
+    print("  Node label    :", max_node)
+
+# plane_strain_limit_check(limit=0.005)
+# tsai_wu_failure()
