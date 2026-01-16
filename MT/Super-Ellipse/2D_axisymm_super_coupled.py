@@ -12,7 +12,6 @@ import operator
 from abaqus import *
 from abaqusConstants import *
 from __future__ import print_function
-from abaqusConstants import ELEMENT_NODAL
 from odbAccess import openOdb
 #session.setValues(kernelMemoryLimit=16384)
 import section
@@ -68,15 +67,15 @@ myModel = mdb.models[modelName]
 
 #############################   PARAMETERS    #############################
 
-r_inner = 200     # semi-axis in a
-z_inner = 200     # semi-axis in c
+r_inner = 241.09     # semi-axis in a
+z_inner = 241.09     # semi-axis in c
 
 n = 1         # superellipse exponent
 
 n_spline = 150  # number of spline points
 N_theta = 10   # number of meridional regions
 
-plyAngle = [0, 90]  # stacking sequence (degrees)
+plyAngle = [60, -30, -60, 30, 60, -30, -60, 30]  # stacking sequence (degrees)
 thick   = 0.15*plyAngle.__len__()  # total thickness
 N_part = plyAngle.__len__()  # number of partitions through thickness
 
@@ -89,11 +88,11 @@ Press = 0.75 # Pressure load
 compositeMaterialName = 'car_epx'  # 'cfk', 'AL', 'gfk', 'cfknew', 'car_epx', 'im7_epx'
 
 # Strength parameters
-Xt = 2323.5    # Longitudinal tensile strength
-Yt = 62.3      # Transverse tensile strength
-Xc = -1017.5    # Longitudinal compressive strength
-Yc = -253.7     # Transverse compressive strength
-S = 89.6       # Shear strength
+Xt = 3179.2    # Longitudinal tensile strength
+Yt = 55.701      # Transverse tensile strength
+Xc = -1705.3    # Longitudinal compressive strength
+Yc = -367.44     # Transverse compressive strength
+S = 199.11       # Shear strength
 
 t_ins = 16                      # insulation thickness                      
 t_outer = 2                     # outer layer thickness
@@ -356,6 +355,7 @@ for theta in theta_vals:
 # --- Combine faces into one surface ---
 if edge_combined:
     p.Surface(side1Edges=tuple(edge_combined), name='Surf_Load')
+    p.Set(edges=tuple(edge_combined), name='Temp_Load')
 else:
     print("No faces found for surface creation.")
 
@@ -670,6 +670,11 @@ region = a1.instances['SuperEllipsoid_2D-1'].sets['set_top']
 mdb.models['EllipseModel_2D'].XsymmBC(name='Top', createStepName='Initial', 
     region=region, localCsys=None)
 
+region = a.instances['SuperEllipsoid_2D-1'].sets['Temp_Load']
+mdb.models['EllipseModel_2D'].TemperatureBC(name='Temp', 
+    createStepName='LoadingStep', region=region, fixed=OFF, 
+    distributionType=UNIFORM, fieldName='', magnitude=20.0, amplitude=UNSET)
+
 A_liner = superellipsoid_area(r_inner, r_inner, z_inner, n, 1)
 A_ins = superellipsoid_area(r_inner + thick, r_inner + thick, z_inner + thick, n, 1)
 A_outer = superellipsoid_area(r_inner + thick + t_ins, r_inner + thick + t_ins, z_inner + thick + t_ins, n, 1)#
@@ -678,7 +683,7 @@ A_outer_total = superellipsoid_area(r_inner + thick + t_ins + t_outer, r_inner +
 # 2. Compute volume
 V_inner = superellipsoid_volume(r_inner + thick, r_inner + thick, z_inner + thick, n, 1) - superellipsoid_volume(r_inner, r_inner, z_inner, n, 1)
 V_ins = superellipsoid_volume(r_inner + thick + t_ins, r_inner + thick + t_ins, z_inner + thick + t_ins, n, 1) - superellipsoid_volume(r_inner + thick, r_inner + thick, z_inner + thick, n, 1)
-V_outer = superellipsoid_volume(r_inner + thick + t_ins + t_outer, r_inner + thick + t_ins + t_outer, z_inner + thick + t_ins + t_outer, n, 1) - superellipsoid_volume(a + thick + t_ins, r_inner + thick + t_ins, z_inner + thick + t_ins, n, 1)
+V_outer = superellipsoid_volume(r_inner + thick + t_ins + t_outer, r_inner + thick + t_ins + t_outer, z_inner + thick + t_ins + t_outer, n, 1) - superellipsoid_volume(r_inner + thick + t_ins, r_inner + thick + t_ins, z_inner + thick + t_ins, n, 1)
 
 # 3. Compute shape factors
 S_liner = shape_factor(A_liner, V_inner, thick, r_inner, r_inner, z_inner)
@@ -697,13 +702,13 @@ Q_total, T3, T2, T1, h_eq = equivalent_heat_coeff(
 )
 region = a1.instances['SuperEllipsoid_2D-1'].surfaces['flux_Load']
 mdb.models['EllipseModel_2D'].SurfaceHeatFlux(name='HeatFlux-1', 
-    createStepName='LoadingStep', region=region, magnitude=Q_total, 
-    distributionType=TOTAL_FORCE)
+    createStepName='LoadingStep', region=region, magnitude=Q_total/A_ins, 
+    distributionType=UNIFORM)
 
 ################# MESHING ###################
 p = mdb.models['EllipseModel_2D'].parts['SuperEllipsoid_2D']
 p.seedPart(size=mesh_size, deviationFactor=0.01, minSizeFactor=0.1)
-elemType1 = mesh.ElemType(elemCode=CGAX8R, elemLibrary=STANDARD)
+elemType1 = mesh.ElemType(elemCode=CGAX8RT, elemLibrary=STANDARD)
 faces1 = p.faces.getByBoundingBox(
     xMin=-1e6, yMin=-1e6, zMin=-1e6,
     xMax=+1e6, yMax=+1e6, zMax=+1e6
@@ -905,6 +910,117 @@ def tsai_wu_index(s1, s2, t12):
             H11*s1*s1 + H22*s2*s2 + H66*t12*t12 +
             2.0*H12*s1*s2)
 
+def tw_and_tension_strain_limit_integration_point(strain_limit=0.005):
+    odb = openOdb(odbPath, readOnly=True)
+    stepName = list(odb.steps.keys())[-1]
+    step = odb.steps[stepName]
+    frameIndex = -1
+    frame = step.frames[frameIndex]
+    if 'S' not in frame.fieldOutputs:
+        raise RuntimeError("Stress output 'S' not found in ODB frame. Request stresses (S).")
+    if 'E' not in frame.fieldOutputs:
+        raise RuntimeError("Strain output 'E' not found in ODB frame. Request strains (E).")
+    Sfield = frame.fieldOutputs['S'].getSubset(position=INTEGRATION_POINT)
+    Efield = frame.fieldOutputs['E'].getSubset(position=INTEGRATION_POINT)
+    E_by_key = {}
+    for ev in Efield.values:
+        if 'exclude_elems' in globals() and ev.elementLabel in exclude_elems:
+            continue
+        inst_name = ev.instance.name if ev.instance else ''
+        ip = getattr(ev, 'integrationPoint', None)
+        sp = getattr(ev, 'sectionPoint', None)
+        if ip is None:
+            continue
+        e11 = float(ev.data[0])  # rr
+        e22 = float(ev.data[1])  # zz
+        e33 = float(ev.data[2])  # tt
+        e12 = float(ev.data[3]) if len(ev.data) > 3 else 0.0  # rz
+        E_by_key[(inst_name, ev.elementLabel, ip, sp)] = (e11, e22, e33, e12)
+    base = os.path.splitext(os.path.basename(odbPath))[0]
+    out_csv = 'tw_tensionStrainLimit_%s_axisym_IP.csv' % base
+    with open(out_csv, 'w', newline='') as f:
+        w = csv.writer(f)
+        w.writerow([
+            'odb','step','frameIndex','frameValue',
+            'instance','elementLabel','integrationPoint','sectionPoint',
+            'S_rr(S11)','S_zz(S22)','S_tt(S33)','T_rz(S12)',
+            'E_rr(E11)','E_zz(E22)','E_tt(E33)','E_rz(E12)',
+            'TW_zz_tt','fails_TW(>=1)',
+            'max_tension(E22,E33)','strain_limit','fails_tension_strain(>limit)',
+            'fails_any'
+        ])
+        max_tw = -1.0
+        max_tw_elem = None
+        max_tw_ip = None
+        max_tw_inst = ''
+        max_eps_tension = -1.0
+        max_eps_elem = None
+        max_eps_ip = None
+        max_eps_inst = ''
+        missing_strain = 0
+        for sv in Sfield.values:
+            if 'exclude_elems' in globals() and sv.elementLabel in exclude_elems:
+                continue
+            inst_name = sv.instance.name if sv.instance else ''
+            ip = getattr(sv, 'integrationPoint', None)
+            if ip is None:
+                continue
+            s11 = float(sv.data[0])  # rr
+            s22 = float(sv.data[1])  # zz
+            s33 = float(sv.data[2])  # tt
+            s12 = float(sv.data[3]) if len(sv.data) > 3 else 0.0  # rz
+            s23 = 0.0
+            tw = tsai_wu_index(s22, s33, s23)
+            fail_tw = 1 if tw >= 1.0 else 0
+            if tw > max_tw:
+                max_tw = tw
+                max_tw_elem = sv.elementLabel
+                max_tw_ip = ip
+                max_tw_inst = inst_name
+            key = (inst_name, sv.elementLabel, ip, sp)
+            if key in E_by_key:
+                e11, e22, e33, e12 = E_by_key[key]
+            else:
+                missing_strain += 1
+                e11 = e22 = e33 = e12 = float('nan')
+            if not (math.isnan(e22) or math.isnan(e33)):
+                e22_t = e22 if e22 > 0.0 else 0.0
+                e33_t = e33 if e33 > 0.0 else 0.0
+                max_tension = max(e22_t, e33_t)
+                fail_eps = 1 if (e22 > strain_limit or e33 > strain_limit) else 0
+                if max_tension > max_eps_tension:
+                    max_eps_tension = max_tension
+                    max_eps_elem = sv.elementLabel
+                    max_eps_ip = ip
+                    max_eps_inst = inst_name
+            else:
+                max_tension = float('nan')
+                fail_eps = 0
+            fail_any = 1 if (fail_tw or fail_eps) else 0
+            w.writerow([
+                base, step.name, frameIndex, frame.frameValue,
+                inst_name, sv.elementLabel, ip, sp,
+                s11, s22, s33, s12,
+                e11, e22, e33, e12,
+                tw, fail_tw,
+                max_tension, strain_limit, fail_eps,
+                fail_any
+            ])
+    odb.close()
+    print("Wrote:", out_csv)
+    if missing_strain:
+        print("WARNING: %d integration-point stress entries had no matching integration-point strain entry." % missing_strain)
+    print("Max Tsai–Wu (IP): %.4f" % max_tw)
+    print("  Instance      :", max_tw_inst)
+    print("  Element label :", max_tw_elem)
+    print("  Integration pt:", max_tw_ip)
+    print("Max tension max(E22+,E33+) (IP): %.6f (limit %.6f)" % (max_eps_tension, strain_limit))
+    print("  Instance      :", max_eps_inst)
+    print("  Element label :", max_eps_elem)
+    print("  Integration pt:", max_eps_ip)
+
+tw_and_tension_strain_limit_integration_point(strain_limit=0.005)
+
 def tw_and_tension_strain_limit_element_nodal(strain_limit=0.005):
     odb = openOdb(odbPath, readOnly=True)
     stepName = list(odb.steps.keys())[-1]
@@ -1014,6 +1130,8 @@ def tw_and_tension_strain_limit_element_nodal(strain_limit=0.005):
     print("  Element label :", max_eps_elem)
     print("  Node label    :", max_eps_node)            
 
+# tw_and_tension_strain_limit_element_nodal(strain_limit=0.005)
+
 def tsai_wu_failure():
     odb = openOdb(odbPath, readOnly=True)
     stepName = list(odb.steps.keys())[-1]
@@ -1062,8 +1180,6 @@ def tsai_wu_failure():
     print("Max Tsai–Wu (ELEMENT_NODAL): %.4f" % max_tw)
     print("  Element label :", max_elem)
     print("  Node label    :", max_node)
-
-tw_and_tension_strain_limit_element_nodal(strain_limit=0.005)
 
 def plane_strain_limit_check(limit=0.005):
     """
