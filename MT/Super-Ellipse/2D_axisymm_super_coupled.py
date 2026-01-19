@@ -84,7 +84,7 @@ z_outer = z_inner + thick
 
 mesh_size = 0.25  # Mesh size
 
-Press = 0.75 # Pressure load
+Press = 0.4 # Pressure load
 compositeMaterialName = 'car_epx'  # 'cfk', 'AL', 'gfk', 'cfknew', 'car_epx', 'im7_epx'
 
 # Strength parameters
@@ -93,6 +93,20 @@ Yt = 55.701      # Transverse tensile strength
 Xc = -1705.3    # Longitudinal compressive strength
 Yc = -367.44     # Transverse compressive strength
 S = 199.11       # Shear strength
+
+# Puck inclination parameters
+p12_t = 0.30
+p23_t = 0.3
+p12_c = 0.35
+p23_c = 0.3
+
+# Optional fiber correction for FF (set False if you don't want it)
+USE_FIBER_CORR = True
+nu12     = 0.44     # lamina major Poisson ratio
+nu_f12   = 0.26    # fiber major Poisson ratio
+E11      = 173700     # lamina E11
+Ef11     = 294000.0   # fiber E11
+m_sigma_f = 1.1       # mean magnification factor
 
 t_ins = 16                      # insulation thickness                      
 t_outer = 2                     # outer layer thickness
@@ -910,6 +924,257 @@ def tsai_wu_index(s1, s2, t12):
             H11*s1*s1 + H22*s2*s2 + H66*t12*t12 +
             2.0*H12*s1*s2)
 
+# Fracture plane search
+theta_min_deg = -90
+theta_max_deg = 90
+theta_step_deg = 1
+
+try:
+    exclude_elems
+except NameError:
+    exclude_elems = set()
+
+EPS = 1e-12
+
+# -------------------------
+# PUCK FUNCTIONS
+# -------------------------
+def puck_ff(s11, s22, s33):
+    Xc_pos = -Xc
+    if USE_FIBER_CORR:
+        coeff = (nu12 - nu_f12 * m_sigma_f * (E11 / max(Ef11, EPS)))
+        s11_eff = s11 - coeff * (s22 + s33)
+    else:
+        s11_eff = s11
+    if s11_eff >= 0.0:
+        f_t = s11_eff / max(Xt, EPS)
+        f_c = 0.0
+    else:
+        f_c = abs(s11_eff) / max(Xc_pos, EPS)
+        f_t = 0.0
+    return max(f_t, f_c), f_t, f_c, s11_eff
+
+
+def puck_iff(s22, s33, s12, s13, s23):
+    Yc_pos = -Yc
+    R23A = Yc_pos / max(2.0 * (1.0 + p23_c), EPS)
+    fmax = -1.0
+    theta_crit = 0.0
+    branch_crit = "tension"
+    n_steps = int(round((theta_max_deg - theta_min_deg) / float(theta_step_deg))) + 1
+    for k in range(n_steps):
+        theta_deg = theta_min_deg + k * theta_step_deg
+        th = math.radians(theta_deg)
+        c = math.cos(th)
+        s = math.sin(th)
+        sigma_n = s22 * c*c + s33 * s*s + 2.0 * s23 * s * c
+        tau_nt  = (s33 - s22) * s * c + 2.0 * s23 * (c*c - s*s)
+        tau_n1  = s13 * s + s12 * c
+        denom = tau_nt*tau_nt + tau_n1*tau_n1
+        if denom < EPS:
+            cos2 = 0.0
+            sin2 = 0.0
+        else:
+            cos2 = (tau_nt*tau_nt) / denom
+            sin2 = (tau_n1*tau_n1) / denom
+        k_t = (p23_t / max(R23A, EPS)) * cos2 + (p12_t / max(S, EPS)) * sin2
+        k_c = (p23_c / max(R23A, EPS)) * cos2 + (p12_c / max(S, EPS)) * sin2
+        if sigma_n >= 0.0:
+            # matrix tension branch
+            term_n = (1.0 / max(Yt, EPS) - k_t) * sigma_n
+            f_here = math.sqrt(
+                term_n*term_n +
+                (tau_nt / max(R23A, EPS))**2 +
+                (tau_n1 / max(S, EPS))**2
+            ) + k_t * sigma_n
+            branch_here = "tension"
+        else:
+            # matrix compression branch
+            f_here = math.sqrt(
+                (k_c * sigma_n)**2 +
+                (tau_nt / max(R23A, EPS))**2 +
+                (tau_n1 / max(S, EPS))**2
+            ) - k_c * sigma_n
+            branch_here = "compression"
+        if f_here > fmax:
+            fmax = f_here
+            theta_crit = theta_deg
+            branch_crit = branch_here
+    return fmax, branch_crit, theta_crit
+
+def failure_analysis(strain_limit=0.005):
+    odb = openOdb(odbPath, readOnly=True)
+    stepName = list(odb.steps.keys())[-1]
+    step = odb.steps[stepName]
+    frameIndex = -1
+    frame = step.frames[frameIndex]
+    if 'S' not in frame.fieldOutputs:
+        raise RuntimeError("Stress output 'S' not found in ODB frame. Request stresses (S).")
+    if 'E' not in frame.fieldOutputs:
+        raise RuntimeError("Strain output 'E' not found in ODB frame. Request strains (E).")
+    Sfield = frame.fieldOutputs['S'].getSubset(position=INTEGRATION_POINT)
+    Efield = frame.fieldOutputs['E'].getSubset(position=INTEGRATION_POINT)
+    # --- Build strain lookup by (instance, element, ip, sectionPoint) ---
+    E_by_key = {}
+    for ev in Efield.values:
+        if ev.elementLabel in exclude_elems:
+            continue
+        inst_name = ev.instance.name if ev.instance else ''
+        ip = getattr(ev, 'integrationPoint', None)
+        sp = getattr(ev, 'sectionPoint', None)
+        if ip is None:
+            continue
+        ed = ev.data
+        e11 = float(ed[0]) if len(ed) > 0 else 0.0
+        e22 = float(ed[1]) if len(ed) > 1 else 0.0
+        e33 = float(ed[2]) if len(ed) > 2 else 0.0
+        e12 = float(ed[3]) if len(ed) > 3 else 0.0  # (12) or (rz) depending on model
+        E_by_key[(inst_name, ev.elementLabel, ip, sp)] = (e11, e22, e33, e12)
+    base = os.path.splitext(os.path.basename(odbPath))[0]
+    out_csv = 'allCriteria_%s_IP.csv' % base
+    max_any = -1.0
+    max_any_elem = None
+    max_any_ip = None
+    max_any_inst = ''
+    max_any_crit = ''
+    max_tw = -1.0
+    max_tw_elem = None
+    max_tw_ip = None
+    max_tw_inst = ''
+    max_eps_tension = -1.0
+    max_eps_elem = None
+    max_eps_ip = None
+    max_eps_inst = ''
+    max_puck = -1.0
+    max_puck_elem = None
+    max_puck_ip = None
+    max_puck_inst = ''
+    missing_strain = 0
+    with open(out_csv, 'w', newline='') as f:
+        w = csv.writer(f)
+        w.writerow([
+            'odb','step','frameIndex','frameValue',
+            'instance','elementLabel','integrationPoint','sectionPoint',
+            # stresses
+            'S11','S22','S33','S12','S13','S23',
+            # strains
+            'E11','E22','E33','E12',
+            # Tsai-Wu + strain limit
+            'TW','FAIL_TW(>=1)',
+            'max_tension_strain(E22+,E33+)','strain_limit','FAIL_tension_strain(>limit)',
+            # Puck
+            'Puck_FF','Puck_FF_t','Puck_FF_c','S_f_eff',
+            'Puck_IFF','Puck_IFF_branch','theta_crit_deg',
+            'FAIL_FF(>=1)','FAIL_IFF(>=1)',
+            # overall
+            'FAIL_any'
+        ])
+        for sv in Sfield.values:
+            if sv.elementLabel in exclude_elems:
+                continue
+            inst_name = sv.instance.name if sv.instance else ''
+            ip = getattr(sv, 'integrationPoint', None)
+            sp = getattr(sv, 'sectionPoint', None)
+            if ip is None:
+                continue
+            sd = sv.data
+            s11 = float(sd[0]) if len(sd) > 0 else 0.0
+            s22 = float(sd[1]) if len(sd) > 1 else 0.0
+            s33 = float(sd[2]) if len(sd) > 2 else 0.0
+            s12 = float(sd[3]) if len(sd) > 3 else 0.0
+            s13 = float(sd[4]) if len(sd) > 4 else 0.0
+            s23 = float(sd[5]) if len(sd) > 5 else 0.0
+            key = (inst_name, sv.elementLabel, ip, sp)
+            if key in E_by_key:
+                e11, e22, e33, e12 = E_by_key[key]
+            else:
+                missing_strain += 1
+                e11 = e22 = e33 = e12 = float('nan')
+            tw = tsai_wu_index(s22, s33, s23)
+            fail_tw = 1 if tw >= 1.0 else 0
+            if tw > max_tw:
+                max_tw = tw
+                max_tw_elem = sv.elementLabel
+                max_tw_ip = ip
+                max_tw_inst = inst_name
+            if not (math.isnan(e22) or math.isnan(e33)):
+                e22_t = e22 if e22 > 0.0 else 0.0
+                e33_t = e33 if e33 > 0.0 else 0.0
+                max_tension = max(e22_t, e33_t)
+                fail_eps = 1 if (e22 > strain_limit or e33 > strain_limit) else 0
+                if max_tension > max_eps_tension:
+                    max_eps_tension = max_tension
+                    max_eps_elem = sv.elementLabel
+                    max_eps_ip = ip
+                    max_eps_inst = inst_name
+            else:
+                max_tension = float('nan')
+                fail_eps = 0
+            ff, ff_t, ff_c, s_f_eff = puck_ff(s22, s11, s33)
+            iff, iff_branch, theta_star = puck_iff(s33, s11, s23, s12, s13)
+            fail_ff = 1 if ff >= 1.0 else 0
+            fail_iff = 1 if iff >= 1.0 else 0
+            fail_any = 1 if (fail_tw or fail_eps or fail_ff or fail_iff) else 0
+            # Track worst across all criteria (TW vs eps vs puck)
+            worst = max(tw, max_tension if not math.isnan(max_tension) else -1.0, ff, iff)
+            if worst > max_any:
+                max_any = worst
+                max_any_elem = sv.elementLabel
+                max_any_ip = ip
+                max_any_inst = inst_name
+                if worst == tw:
+                    max_any_crit = 'Tsai-Wu'
+                elif worst == ff:
+                    max_any_crit = 'Puck_FF'
+                elif worst == iff:
+                    max_any_crit = 'Puck_IFF'
+                else:
+                    max_any_crit = 'Tension_strain'
+            # Track worst puck (max of FF/IFF)
+            worst_puck = max(ff, iff)
+            if worst_puck > max_puck:
+                max_puck = worst_puck
+                max_puck_elem = sv.elementLabel
+                max_puck_ip = ip
+                max_puck_inst = inst_name
+            w.writerow([
+                base, step.name, frameIndex, frame.frameValue,
+                inst_name, sv.elementLabel, ip, str(sp) if sp is not None else '',
+                s11, s22, s33, s12, s13, s23,
+                e11, e22, e33, e12,
+                tw, fail_tw,
+                max_tension, strain_limit, fail_eps,
+                ff, ff_t, ff_c, s_f_eff,
+                iff, iff_branch, theta_star,
+                fail_ff, fail_iff,
+                fail_any
+            ])
+    odb.close()
+    print("Wrote:", out_csv)
+    if missing_strain:
+        print("WARNING: %d integration-point stress entries had no matching integration-point strain entry." % missing_strain)
+    print("Max Tsai–Wu (IP): %.4f" % max_tw)
+    print("  Instance      :", max_tw_inst)
+    print("  Element label :", max_tw_elem)
+    print("  Integration pt:", max_tw_ip)
+    print("Max tension max(E22+,E33+) (IP): %.6f (limit %.6f)" % (max_eps_tension, strain_limit))
+    print("  Instance      :", max_eps_inst)
+    print("  Element label :", max_eps_elem)
+    print("  Integration pt:", max_eps_ip)
+    print("Max(Puck FF/IFF) (IP): %.4f" % max_puck)
+    print("  Instance      :", max_puck_inst)
+    print("  Element label :", max_puck_elem)
+    print("  Integration pt:", max_puck_ip)
+    print("Max(ANY criterion) (IP): %.4f  [%s]" % (max_any, max_any_crit))
+    print("  Instance      :", max_any_inst)
+    print("  Element label :", max_any_elem)
+    print("  Integration pt:", max_any_ip)
+
+
+failure_analysis(strain_limit=0.005)
+
+
+################################## Seperate - Tsai Wu, Strain and Pucks code ####################################
 def tw_and_tension_strain_limit_integration_point(strain_limit=0.005):
     odb = openOdb(odbPath, readOnly=True)
     stepName = list(odb.steps.keys())[-1]
@@ -1019,118 +1284,8 @@ def tw_and_tension_strain_limit_integration_point(strain_limit=0.005):
     print("  Element label :", max_eps_elem)
     print("  Integration pt:", max_eps_ip)
 
-tw_and_tension_strain_limit_integration_point(strain_limit=0.005)
+# tw_and_tension_strain_limit_integration_point(strain_limit=0.005)
 
-def tw_and_tension_strain_limit_element_nodal(strain_limit=0.005):
-    odb = openOdb(odbPath, readOnly=True)
-    stepName = list(odb.steps.keys())[-1]
-    step = odb.steps[stepName]
-    frameIndex = -1
-    frame = step.frames[frameIndex]
-    if 'S' not in frame.fieldOutputs:
-        raise RuntimeError("Stress output 'S' not found in ODB frame. Request stresses (S).")
-    if 'E' not in frame.fieldOutputs:
-        raise RuntimeError("Strain output 'E' not found in ODB frame. Request strains (E).")
-    Sfield = frame.fieldOutputs['S'].getSubset(position=ELEMENT_NODAL)
-    Efield = frame.fieldOutputs['E'].getSubset(position=ELEMENT_NODAL)
-    E_by_key = {}
-    for ev in Efield.values:
-        if 'exclude_elems' in globals() and ev.elementLabel in exclude_elems:
-            continue
-        inst_name = ev.instance.name if ev.instance else ''
-        node_label = getattr(ev, 'nodeLabel', None)
-        if node_label is None:
-            continue
-        e11 = float(ev.data[0])  # rr
-        e22 = float(ev.data[1])  # zz (E22)
-        e33 = float(ev.data[2])  # tt (E33)
-        e12 = float(ev.data[3]) if len(ev.data) > 3 else 0.0
-        E_by_key[(inst_name, ev.elementLabel, node_label)] = (e11, e22, e33, e12)
-    base = os.path.splitext(os.path.basename(odbPath))[0]
-    out_csv = 'tw_tensionStrainLimit_%s_axisym_elementNodal.csv' % base
-    with open(out_csv, 'w', newline='') as f:
-        w = csv.writer(f)
-        w.writerow([
-            'odb','step','frameIndex','frameValue',
-            'instance','elementLabel','nodeLabel',
-            'S_rr(S11)','S_zz(S22)','S_tt(S33)','T_rz(S12)',
-            'E_rr(E11)','E_zz(E22)','E_tt(E33)','E_rz(E12)',
-            'TW_zz_tt','fails_TW(>=1)',
-            'max_tension(E22,E33)','strain_limit','fails_tension_strain(>limit)',
-            'fails_any'
-        ])
-        max_tw = -1.0
-        max_tw_elem = None
-        max_tw_node = None
-        max_tw_inst = ''
-        max_eps_tension = -1.0
-        max_eps_elem = None
-        max_eps_node = None
-        max_eps_inst = ''
-        missing_strain = 0
-        for sv in Sfield.values:
-            if 'exclude_elems' in globals() and sv.elementLabel in exclude_elems:
-                continue
-            inst_name = sv.instance.name if sv.instance else ''
-            node_label = getattr(sv, 'nodeLabel', None)
-            if node_label is None:
-                continue
-            s11 = float(sv.data[0])  # rr
-            s22 = float(sv.data[1])  # zz
-            s33 = float(sv.data[2])  # tt
-            s12 = float(sv.data[3]) if len(sv.data) > 3 else 0.0
-            s23 = 0.0
-            tw = tsai_wu_index(s22, s33, s23)
-            fail_tw = 1 if tw >= 1.0 else 0
-            if tw > max_tw:
-                max_tw = tw
-                max_tw_elem = sv.elementLabel
-                max_tw_node = node_label
-                max_tw_inst = inst_name
-            key = (inst_name, sv.elementLabel, node_label)
-            if key in E_by_key:
-                e11, e22, e33, e12 = E_by_key[key]
-            else:
-                missing_strain += 1
-                e11 = e22 = e33 = e12 = float('nan')
-            if not (math.isnan(e22) or math.isnan(e33)):
-                e22_t = e22 if e22 > 0.0 else 0.0
-                e33_t = e33 if e33 > 0.0 else 0.0
-                max_tension = max(e22_t, e33_t)
-                fail_eps = 1 if (e22 > strain_limit or e33 > strain_limit) else 0
-                if max_tension > max_eps_tension:
-                    max_eps_tension = max_tension
-                    max_eps_elem = sv.elementLabel
-                    max_eps_node = node_label
-                    max_eps_inst = inst_name
-            else:
-                max_tension = float('nan')
-                fail_eps = 0
-            fail_any = 1 if (fail_tw or fail_eps) else 0
-            w.writerow([
-                base, step.name, frameIndex, frame.frameValue,
-                inst_name, sv.elementLabel, node_label,
-                s11, s22, s33, s12,
-                e11, e22, e33, e12,
-                tw, fail_tw,
-                max_tension, strain_limit, fail_eps,
-                fail_any
-            ])
-    odb.close()
-    print("Wrote:", out_csv)
-    if missing_strain:
-        print("WARNING: %d ELEMENT_NODAL stress entries had no matching ELEMENT_NODAL strain entry." % missing_strain)
-    print("Max Tsai–Wu (ELEMENT_NODAL): %.4f" % max_tw)
-    print("  Instance      :", max_tw_inst)
-    print("  Element label :", max_tw_elem)
-    print("  Node label    :", max_tw_node)
-    print("Max tension max(E22+,E33+) (ELEMENT_NODAL): %.6f (limit %.6f)" %
-          (max_eps_tension, strain_limit))
-    print("  Instance      :", max_eps_inst)
-    print("  Element label :", max_eps_elem)
-    print("  Node label    :", max_eps_node)            
-
-# tw_and_tension_strain_limit_element_nodal(strain_limit=0.005)
 
 def tsai_wu_failure():
     odb = openOdb(odbPath, readOnly=True)
@@ -1238,3 +1393,67 @@ def plane_strain_limit_check(limit=0.005):
 
 # plane_strain_limit_check(limit=0.005)
 # tsai_wu_failure()
+
+def puck_failure_integration_points():
+    odb = openOdb(odbPath, readOnly=True)
+    stepName = list(odb.steps.keys())[-1]
+    step = odb.steps[stepName]
+    frameIndex = -1
+    frame = step.frames[frameIndex]
+    if 'S' not in frame.fieldOutputs:
+        raise RuntimeError("Stress output 'S' not found in ODB frame. Request stresses (S).")
+    Sfield = frame.fieldOutputs['S'].getSubset(position=INTEGRATION_POINT)
+    base = os.path.splitext(os.path.basename(odbPath))[0]
+    out_csv = 'puck_%s_integrationPoint.csv' % base
+    with open(out_csv, 'w', newline='') as f:
+        w = csv.writer(f)
+        w.writerow([
+            'odb','step','frameIndex','frameValue',
+            'instance','elementLabel',
+            'integrationPoint',
+            'S11','S22','S33','S12','S13','S23',
+            'FF','FF_t','FF_c','S11_eff',
+            'IFF','IFF_branch','theta_crit_deg',
+            'FAIL_FF(>=1)','FAIL_IFF(>=1)','FAIL_any'
+        ])
+        max_any = -1.0
+        max_elem = None
+        max_ip = None
+        for v in Sfield.values:
+            if v.elementLabel in exclude_elems:
+                continue
+            data = v.data
+            s11 = float(data[0])
+            s22 = float(data[1])
+            s33 = float(data[2])
+            s12 = float(data[3]) if len(data) > 3 else 0.0
+            s13 = float(data[4]) if len(data) > 4 else 0.0
+            s23 = float(data[5]) if len(data) > 5 else 0.0
+            ff, ff_t, ff_c, s11_eff = puck_ff(s22, s11, s33)
+            iff, iff_branch, theta_star = puck_iff(s33, s11, s23, s12, s13)
+            fail_ff = 1 if ff >= 1.0 else 0
+            fail_iff = 1 if iff >= 1.0 else 0
+            fail_any = 1 if (fail_ff or fail_iff) else 0
+            worst = max(ff, iff)
+            if worst > max_any:
+                max_any = worst
+                max_elem = v.elementLabel
+                max_ip = getattr(v, 'integrationPoint', None)
+            inst_name = v.instance.name if v.instance else ''
+            ip = getattr(v, 'integrationPoint', None)
+            w.writerow([
+                base, step.name, frameIndex, frame.frameValue,
+                inst_name, v.elementLabel,
+                ip,
+                s11, s22, s33, s12, s13, s23,
+                ff, ff_t, ff_c, s11_eff,
+                iff, iff_branch, theta_star,
+                fail_ff, fail_iff, fail_any
+            ])
+    odb.close()
+    print("Wrote:", out_csv)
+    print("Max(Puck FF/IFF): %.4f" % max_any)
+    print("  Element label     :", max_elem)
+    print("  Integration point :", max_ip)
+
+# puck_failure_integration_points()
