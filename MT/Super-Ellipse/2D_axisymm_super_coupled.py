@@ -75,16 +75,16 @@ n = 1         # superellipse exponent
 n_spline = 150  # number of spline points
 N_theta = 10   # number of meridional regions
 
-plyAngle = [60, -30, -60, 30, 60, -30, -60, 30]  # stacking sequence (degrees)
-thick   = 0.15*plyAngle.__len__()  # total thickness
+plyAngle = [45,-45,0,0,45,-45,0,0,45,-45,0,0,45,-45]  # stacking sequence (degrees)
+thick   = 0.16*plyAngle.__len__()  # total thickness
 N_part = plyAngle.__len__()  # number of partitions through thickness
 
 r_outer = r_inner + thick
 z_outer = z_inner + thick
 
-mesh_size = 0.25  # Mesh size
+mesh_size = 0.3  # Mesh size
 
-Press = 0.4 # Pressure load
+Press = 1 # Pressure load
 compositeMaterialName = 'car_epx'  # 'cfk', 'AL', 'gfk', 'cfknew', 'car_epx', 'im7_epx'
 
 # Strength parameters
@@ -1129,7 +1129,7 @@ def failure_analysis(strain_limit=0.005):
                 elif worst == iff:
                     max_any_crit = 'Puck_IFF'
                 else:
-                    max_any_crit = 'Tension_strain'
+                    max_any_crit = 'Permeation_strain'
             # Track worst puck (max of FF/IFF)
             worst_puck = max(ff, iff)
             if worst_puck > max_puck:
@@ -1456,4 +1456,4 @@ def puck_failure_integration_points():
     print("  Element label     :", max_elem)
     print("  Integration point :", max_ip)
 
-# puck_failure_integration_points()
+puck_failure_integration_points()

@@ -62,16 +62,16 @@ myModel = mdb.models[modelName]
 
 #############################   PARAMETERS    #############################
 
-r_inner = 200     # semi-axis in a
-z_inner = 200     # semi-axis in c
+r_inner = 180     # semi-axis in a
+z_inner = 180     # semi-axis in c
 
 n = 1         # superellipse exponent
 
 n_spline = 150  # number of spline points
 N_theta = 10   # number of meridional regions
 
-plyAngle = [0, 90]  # stacking sequence (degrees)
-thick   = 0.15*plyAngle.__len__()  # total thickness
+plyAngle = [45, -45, 45, -45, 45, -45, 45, -45, 45, -45]  # stacking sequence (degrees)
+thick   = 2.8*plyAngle.__len__()  # total thickness
 N_part = plyAngle.__len__()  # number of partitions through thickness
 
 r_outer = r_inner + thick
@@ -79,15 +79,29 @@ z_outer = z_inner + thick
 
 mesh_size = 0.25  # Mesh size
 
-Press = 0.75 # Pressure load
-compositeMaterialName = 'car_epx'  # 'cfk', 'AL', 'gfk', 'cfknew', 'car_epx', 'im7_epx'
+Press = 0.1 # Pressure load
+compositeMaterialName = 'im7_epx'  # 'cfk', 'AL', 'gfk', 'cfknew', 'car_epx', 'im7_epx'
 
 # Strength parameters
-Xt = 2323.5    # Longitudinal tensile strength
-Yt = 62.3      # Transverse tensile strength
-Xc = -1017.5    # Longitudinal compressive strength
-Yc = -253.7     # Transverse compressive strength
-S = 89.6       # Shear strength
+Xt = 3179.2    # Longitudinal tensile strength
+Yt = 55.701      # Transverse tensile strength
+Xc = -1705.3    # Longitudinal compressive strength
+Yc = -367.44     # Transverse compressive strength
+S = 199.11       # Shear strength
+
+# Puck inclination parameters
+p12_t = 0.30
+p23_t = 0.3
+p12_c = 0.35
+p23_c = 0.3
+
+# Optional fiber correction for FF (set False if you don't want it)
+USE_FIBER_CORR = True
+nu12     = 0.44     # lamina major Poisson ratio
+nu_f12   = 0.26    # fiber major Poisson ratio
+E11      = 173700     # lamina E11
+Ef11     = 294000.0   # fiber E11
+m_sigma_f = 1.1       # mean magnification factor
 ##############################   Geometry   #############################
 
 s = myModel.ConstrainedSketch(
@@ -635,12 +649,12 @@ p = mdb.models[modelName].parts['SuperEllipsoid_2D']
 a.Instance(name='SuperEllipsoid_2D-1', part=p, dependent=ON)
 
 ################ Step Creation ###################
-mdb.models[modelName].CoupledTempDisplacementStep(name='LoadingStep', 
-    previous='Initial', description='LoadingStep', response=STEADY_STATE, 
-    deltmx=None, cetol=None, creepIntegration=None, amplitude=RAMP)
+# mdb.models[modelName].CoupledTempDisplacementStep(name='LoadingStep', 
+#     previous='Initial', description='LoadingStep', response=STEADY_STATE, 
+#     deltmx=None, cetol=None, creepIntegration=None, amplitude=RAMP)
 
-# mdb.models[modelName].StaticStep(name='LoadingStep', previous='Initial', 
-#     initialInc=1, minInc=1e-05, maxInc=1.0)
+mdb.models[modelName].StaticStep(name='LoadingStep', previous='Initial', 
+    initialInc=1, minInc=1e-05, maxInc=1.0)
 
 ################# Loading ###################
 a1 = mdb.models['EllipseModel_2D'].rootAssembly

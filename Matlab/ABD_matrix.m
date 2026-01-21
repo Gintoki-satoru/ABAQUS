@@ -13,14 +13,13 @@ G13 = 3900;
 G23 = 5200;
 
 % Laminate definition
-theta_deg = [60, -30, -60, 30, 60, -30, -60, 30];
-tply = 0.15;
+theta_deg = [45, -45, 45, -45, -45,45, -45, 45];
+tply = 0.16;
 nply = numel(theta_deg);
 
 % Reduced stiffness Q
 
-nu21_calc = nu12 * E2 / E1;
-den = 1 - nu12*nu21_calc;
+den = 1 - nu12*nu21;
 
 Q11 = E1 / den;
 Q22 = E2 / den;
@@ -58,9 +57,9 @@ ABD = [A B; B D];
 
 
 % Print results
-disp('A (units: modulus*length):'); disp(A);
-disp('B (units: modulus*length^2):'); disp(B);
-disp('D (units: modulus*length^3):'); disp(D);
+% disp('A (units: modulus*length):'); disp(A);
+% disp('B (units: modulus*length^2):'); disp(B);
+% disp('D (units: modulus*length^3):'); disp(D);
 disp('ABD:'); disp(ABD);
 
 
