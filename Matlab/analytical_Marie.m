@@ -1,10 +1,10 @@
 % Geometry
 R = 180;     % Radius [mm]
-t     = 28;     % total thickness [mm]
+t     = 0.16*6;     % total thickness [mm]
 R_mid = 180 + t/2;
 
 % Pressures
-Pi = 70;         % internal pressure [MPa]
+Pi = 0.1;         % internal pressure [MPa]
 Po = 0.0;          % external pressure [MPa]
 
 % Material properties - car_epx
@@ -19,29 +19,30 @@ Po = 0.0;          % external pressure [MPa]
 % nu23 = 0.369;
 
 % Im7
-% E1  = 161000;       
-% E2  = 11380;
-% E3  = 11380;
-% G12 = 5200;
-% G13 = 5200;
-% G23 = 3900;
-% nu12 = 0.32;
-% nu13 = 0.32;
-% nu23 = 0.45;
-
-E1  = 10000;   % MPa
-E2  = 147000;
-E3  = 10000;
-G12 = 7000;
-G13 = 3700;
-G23 = 7000;
-nu21 = 0.27;
-nu13 = 0.35;
-nu23 = 0.27;
+E2  = 161000;       
+E1  = 11380;
+E3  = 11380;
+G12 = 5200;
+G23 = 5200;
+G13 = 3900;
+nu21 = 0.32;
+nu23 = 0.32;
+nu13 = 0.45;
 nu12 = nu21*E1/E2;
 
+% E1  = 10000;   % MPa
+% E2  = 147000;
+% E3  = 10000;
+% G12 = 7000;
+% G13 = 3700;
+% G23 = 7000;
+% nu21 = 0.27;
+% nu13 = 0.35;
+% nu23 = 0.27;
+% nu12 = nu21*E1/E2;
+
 % Quasi-isotropic symmetric layup
-angles_deg = [45 -45 45 -45 45 -45 45 -45 45 -45];
+angles_deg = [0, 60, -60, -60, 60, 0];
 Nply = numel(angles_deg);
 tply = t / Nply;
 

@@ -441,167 +441,129 @@ else:
     prop_table = None
 
 def materialComposite():
-    """
-    Defines the material properties for composite materials using CORRECT rotation about r-axis.
-    Only creates materials for angles actually used in plyAngle list (optimized).
-    
-    For axisymmetric pressure vessel with RADIAL PLIES:
-    - Direction 1 = radial (r) - THROUGH-THICKNESS
-    - Direction 2 = axial (z)  
-    - Direction 3 = hoop/circumferential (θ)
-    - Fibers lie in θ-z plane (tangent to the surface)
-    - Fiber angle φ measured about r-axis (rotation in θ-z plane)
-    
-    Material coordinate system (NEW mapping for STACK_3):
-    - Axis 1 (fiber) = axial/z at 0°, rotates in Y-Z plane
-    - Axis 2 (transverse in-plane) = hoop/θ
-    - Axis 3 (through-thickness/STACK) = radial/r (unchanged by rotation)
-    """
     def transform_compliance_axisymmetric(phi_deg, E1, E2, E3, Nu12, Nu13, Nu23, G12, G13, G23):
         """
-        Transform compliance matrix for rotation about LOCAL axis 1 (radial/thickness).
-        
-        Local coordinate system (Material-Local-CS) per Abaqus requirement:
-        - Local 1 = Global X (radial/thickness) - ROTATION AXIS
-        - Local 2 = Global Y (axial/fiber at 0°)
-        - Local 3 = Global Z (hoop/circumferential) - STACK_3 direction (REQUIRED by Abaqus)
-        
-        Material properties in local coordinates:
-        - Material 1 = through-thickness/radial (E1=10000)
-        - Material 2 = fiber direction at 0° (E2=147000)
-        - Material 3 = transverse/hoop (E3=10000)
-        
-        Rotation: About local-1 (radial axis) by angle phi in 2-3 plane (axial-hoop)
-        - phi=0°: fiber in local-2 (axial)
-        - phi=90°: fiber in local-3 (hoop)
-        
-        Args:
-            phi_deg: Fiber angle in degrees from axial (local-2) toward hoop (local-3)
-        
+        Rotate compliance about LOCAL axis-1 (radial/thickness) by phi in the 2-3 plane (axial-hoop).
+
+        Local axes convention USED HERE (same as your current code):
+          1 = radial/thickness
+          2 = axial (fiber direction at phi=0)
+          3 = hoop  (fiber direction at phi=90)
+
         Returns:
-            Sr_phi: Transformed 6x6 compliance matrix in local coordinate system
+          Sr_phi : rotated 6x6 compliance matrix in the SAME 1-2-3 basis (Voigt: 11,22,33,23,13,12)
         """
         phi_rad = math.radians(phi_deg)
         c = math.cos(phi_rad)
         s = math.sin(phi_rad)
-        
-        # Base compliance matrix in material coordinates
-        # Material axes: 1=radial/thickness, 2=fiber/axial, 3=transverse/hoop
+        # Base compliance in material axes (1=radial, 2=fiber@0, 3=hoop/transverse)
         S0 = np.zeros((6, 6))
-        S0[0, 0] = 1.0 / E1  # Radial/thickness (through-thickness direction)
-        S0[1, 1] = 1.0 / E2  # Fiber direction at 0°
-        S0[2, 2] = 1.0 / E3  # Transverse/hoop
-        S0[0, 1] = S0[1, 0] = -Nu12 / E1  # Radial-Fiber coupling
-        S0[0, 2] = S0[2, 0] = -Nu13 / E1  # Radial-Hoop coupling
-        S0[1, 2] = S0[2, 1] = -Nu23 / E2  # Fiber-Hoop coupling
-        S0[3, 3] = 1.0 / G23  # Shear in 2-3 plane (fiber-hoop)
-        S0[4, 4] = 1.0 / G13  # Shear in 1-3 plane (radial-hoop)
-        S0[5, 5] = 1.0 / G12  # Shear in 1-2 plane (radial-fiber)
-        
-        # Transformation matrix: rotation about axis 1 (radial) in 2-3 plane (axial-hoop)
-        # Maps local stresses [σ_1, σ_2, σ_3, τ_23, τ_13, τ_12] to rotated material stresses
+        S0[0, 0] = 1.0 / E1
+        S0[1, 1] = 1.0 / E2
+        S0[2, 2] = 1.0 / E3
+        S0[0, 1] = S0[1, 0] = -Nu12 / E1
+        S0[0, 2] = S0[2, 0] = -Nu13 / E1
+        S0[1, 2] = S0[2, 1] = -Nu23 / E2
+        S0[3, 3] = 1.0 / G23  # 23
+        S0[4, 4] = 1.0 / G13  # 13
+        S0[5, 5] = 1.0 / G12  # 12
+        # Stress transformation in Voigt for rotation about axis-1 in 2-3 plane
+        # Voigt ordering assumed: [11,22,33,23,13,12]
         T = np.array([
-            [1,        0,        0,        0,        0,        0],         # σ'_1 (radial - unchanged)
-            [0,        c*c,      s*s,      2*c*s,    0,        0],         # σ'_2 (fiber direction)
-            [0,        s*s,      c*c,     -2*c*s,    0,        0],         # σ'_3 (transverse)
-            [0,       -c*s,      c*s,   c*c-s*s,    0,        0],         # τ'_23 (fiber-transverse)
-            [0,        0,        0,        0,        c,       -s],         # τ'_13 (radial-transverse)
-            [0,        0,        0,        0,        s,        c]          # τ'_12 (radial-fiber)
+            [1,        0,        0,        0,        0,        0],
+            [0,        c*c,      s*s,      2*c*s,    0,        0],
+            [0,        s*s,      c*c,     -2*c*s,    0,        0],
+            [0,       -c*s,      c*s,   c*c-s*s,    0,        0],
+            [0,        0,        0,        0,        c,       -s],
+            [0,        0,        0,        0,        s,        c]
         ])
-        
-        # Transform: Sr = T^T * S0 * T
+        # Rotate compliance: S' = T^T * S * T
         Sr_phi = np.dot(np.dot(T.T, S0), T)
-        
-        return np.dot(np.dot(T.T, S0), T)
-    
-    # Create materials for each unique ply angle using transformation
-    unique_angles = set(plyAngle)
-    print("Creating {} pre-rotated materials in local coordinate system...".format(len(unique_angles)))
-    
-    for phi in sorted(unique_angles):
+        return Sr_phi
+    def C_to_abaqus_anisotropic_table(C):
+        """
+        Map 6x6 stiffness matrix C (Voigt: [11,22,33,23,13,12]) to Abaqus
+        *ELASTIC, TYPE=ANISOTROPIC data order:
+
+        Line 1: D1111 D1122 D2222 D1133 D2233 D3333 D1112 D2212
+        Line 2: D3312 D1212 D1113 D2213 D3313 D1213 D1313 D1123
+        Line 3: D2223 D3323 D1223 D1323 D2323
+        """
+        # Voigt indices: 0->11, 1->22, 2->33, 3->23, 4->13, 5->12
+        table = (
+            C[0,0], C[0,1], C[1,1], C[0,2], C[1,2], C[2,2], C[0,5], C[1,5],
+            C[2,5], C[5,5], C[0,4], C[1,4], C[2,4], C[5,4], C[4,4], C[0,3],
+            C[1,3], C[2,3], C[5,3], C[4,3], C[3,3]
+        )
+        return table
+    def assert_stiffness_ok(C, material_name, phi, tempK):
+        if not np.allclose(C, C.T, atol=1e-6, rtol=1e-6):
+            raise RuntimeError("C not symmetric for {} at phi={} T={}".format(material_name, phi, tempK))
+        if np.any(np.diag(C) <= 0.0):
+            raise RuntimeError("Non-positive stiffness diagonal for {} at phi={} T={}".format(material_name, phi, tempK))
+    unique_angles = sorted(set(plyAngle))
+    for phi in unique_angles:
         material_name = "{}_{:.0f}".format(compositeMaterialName, phi)
         compositeMaterial = myModel.Material(material_name)
-        elastic_table = []
+        anisotropic_table_rows = []
         expansion_table = []
-        # --- loop over temperature rows (for car_epx) ---
+        cphi = math.cos(math.radians(phi))
+        sphi = math.sin(math.radians(phi))
         for (tempK, E1t, E2t, E3t, G12t, G13t, G23t, nu21t, nu23t, nu13t, alpha_fiber, alpha_trans) in prop_table:
-            # reciprocity: nu12 from nu21
+            # Reciprocity
             nu12t = nu21t * (E1t / E2t)
-            # Get transformed compliance for this angle + temperature
             Sr_phi = transform_compliance_axisymmetric(
                 phi, E1t, E2t, E3t, nu12t, nu13t, nu23t, G12t, G13t, G23t
             )
-            # Extract engineering constants from transformed compliance
-            E1_rot = 1.0 / Sr_phi[0, 0]
-            E2_rot = 1.0 / Sr_phi[1, 1]
-            E3_rot = 1.0 / Sr_phi[2, 2]
-            Nu12_rot = -Sr_phi[1, 0] / Sr_phi[0, 0]
-            Nu13_rot = -Sr_phi[2, 0] / Sr_phi[0, 0]
-            Nu23_rot = -Sr_phi[2, 1] / Sr_phi[1, 1]
-            G12_rot = 1.0 / Sr_phi[5, 5]
-            G13_rot = 1.0 / Sr_phi[4, 4]
-            G23_rot = 1.0 / Sr_phi[3, 3]
-            # Temperature-dependent elastic constants: temperature is LAST entry
-            elastic_table.append(
-                (E1_rot, E2_rot, E3_rot,
-                Nu12_rot, Nu13_rot, Nu23_rot,
-                G12_rot, G13_rot, G23_rot,
-                tempK)
-            )
-            # ---- thermal expansion: map base values (local axes) then rotate ----
-            # base: alpha11=alpha33=alpha_trans, alpha22=alpha_fiber
+            C_phi = np.linalg.inv(Sr_phi)
+            assert_stiffness_ok(C_phi, material_name, phi, tempK)
+            row = C_to_abaqus_anisotropic_table(C_phi)
+            if compositeMaterialName == 'car_epx':
+                anisotropic_table_rows.append(tuple(list(row) + [tempK]))
+            else:
+                anisotropic_table_rows.append(row)
             alpha11_t = alpha_trans
             alpha22_t = alpha_fiber
             alpha33_t = alpha_trans
-            c = math.cos(math.radians(phi))
-            s = math.sin(math.radians(phi))
             alpha_1_rot = alpha11_t
-            alpha_2_rot = alpha22_t * c*c + alpha33_t * s*s
-            alpha_3_rot = alpha22_t * s*s + alpha33_t * c*c
-            # Temperature-dependent expansion: temperature is LAST entry
-            expansion_table.append((alpha_1_rot, alpha_2_rot, alpha_3_rot, tempK))
-        # Create material with temperature-dependent tables
+            alpha_2_rot = alpha22_t * cphi*cphi + alpha33_t * sphi*sphi
+            alpha_3_rot = alpha22_t * sphi*sphi + alpha33_t * cphi*cphi
+            if compositeMaterialName == 'car_epx':
+                expansion_table.append((alpha_1_rot, alpha_2_rot, alpha_3_rot, tempK))
+            else:
+                expansion_table.append((alpha_1_rot, alpha_2_rot, alpha_3_rot))
         if compositeMaterialName == 'car_epx':
             compositeMaterial.Elastic(
-                type=ENGINEERING_CONSTANTS,
+                type=ANISOTROPIC,
                 temperatureDependency=ON,
-                table=tuple(elastic_table)
+                table=tuple(anisotropic_table_rows)
             )
-        else:
-            # temperature-independent (single-row table assumed)
-            compositeMaterial.Elastic(
-                type=ENGINEERING_CONSTANTS,
-                table=(elastic_table[0][:9],)  # strip temperature column
-            )
-        if compositeMaterialName == 'car_epx':
             compositeMaterial.Expansion(
                 type=ORTHOTROPIC,
                 temperatureDependency=ON,
                 table=tuple(expansion_table)
             )
         else:
+            compositeMaterial.Elastic(
+                type=ANISOTROPIC,
+                table=(anisotropic_table_rows[0],)
+            )
             compositeMaterial.Expansion(
                 type=ORTHOTROPIC,
-                table=(expansion_table[0][:3],)
+                table=(expansion_table[0],)
             )
         if compositeMaterialName == 'car_epx':
             k_table = []
             for (tempK, k22, k11, k33) in car_epx_k_table:
-                # Rotation about axis 1 in 2-3 plane
-                c = math.cos(math.radians(phi))
-                s = math.sin(math.radians(phi))
                 k11_rot = k11
-                k22_rot = k22 * c*c + k33 * s*s
-                k33_rot = k22 * s*s + k33 * c*c
-                # Abaqus ORTHOTROPIC order: (k11, k22, k33, T)
+                k22_rot = k22 * cphi*cphi + k33 * sphi*sphi
+                k33_rot = k22 * sphi*sphi + k33 * cphi*cphi
                 k_table.append((k11_rot, k22_rot, k33_rot, tempK))
             compositeMaterial.Conductivity(
                 type=ORTHOTROPIC,
                 temperatureDependency=ON,
                 table=tuple(k_table)
             )
-        print("  Angle {}°: created temp-dependent material with {} rows".format(phi, len(elastic_table)))
-        # Create section for this material
         section_name = "Composite_Section_{:.0f}".format(phi)
         myModel.HomogeneousSolidSection(name=section_name, material=material_name, thickness=None)
 
@@ -786,8 +748,12 @@ def layer_mid_delta(k, thick, N_part):
 #     stackDirection=STACK_3
 # )
 
+
 r_cutoff = 4.0
+z_cutoff = 4.0
 exclude_elems = set()
+elem_to_phi = {}
+elem_to_k   = {}
 
 for elem in p.elements:
     elemLabel = elem.label
@@ -800,6 +766,8 @@ for elem in p.elements:
     z_c = sum(z) / len(z)
     if r_c < r_cutoff:
         exclude_elems.add(elemLabel)
+    if z_c < z_cutoff:
+        exclude_elems.add(elemLabel)
     # --- solve for thickness offset ---
     delta = solve_delta_for_point(
         r_c, z_c,
@@ -810,6 +778,9 @@ for elem in p.elements:
         continue   # skip elements outside the wall
     # --- map to thickness layer ---
     k = layer_index_from_delta(delta, thick, N_part)
+    phi = plyAngle[k]
+    elem_to_k[elemLabel] = k
+    elem_to_phi[elemLabel] = phi
     delta_ref = layer_mid_delta(k, thick, N_part)
     a_ref = r_inner + delta_ref
     c_ref = z_inner + delta_ref
@@ -877,6 +848,46 @@ def tsai_wu_index(s1, s2, t12):
     return (H1*s1 + H2*s2 + H6*t12 +
             H11*s1*s1 + H22*s2*s2 + H66*t12*t12 +
             2.0*H12*s1*s2)
+
+def voigt6_to_tensor(s11, s22, s33, s12, s13, s23):
+    return np.array([
+        [s11, s12, s13],
+        [s12, s22, s23],
+        [s13, s23, s33]
+    ], dtype=float)
+
+def tensor_to_voigt6(T):
+    return (T[0,0], T[1,1], T[2,2], T[0,1], T[0,2], T[1,2])
+
+def R_about_axis1(phi_deg):
+    phi = math.radians(phi_deg)
+    c = math.cos(phi)
+    s = math.sin(phi)
+    # Basis (1,2,3) -> (1,2',3')
+    return np.array([
+        [1.0, 0.0, 0.0],
+        [0.0,  c,   s ],
+        [0.0, -s,   c ]
+    ], dtype=float)
+
+def rotate_tensor_about1(T_global, phi_deg):
+    R = R_about_axis1(phi_deg)
+    return R.dot(T_global).dot(R.T)
+
+def to_puck_axes_from_rotated(T_rot):
+    P = np.array([
+        [0.0, 1.0, 0.0],  # puck-1 (fiber)     <- rot-2'
+        [0.0, 0.0, 1.0],  # puck-2 (trans)     <- rot-3'
+        [1.0, 0.0, 0.0]   # puck-3 (thickness) <- rot-1
+    ], dtype=float)
+    return P.dot(T_rot).dot(P.T)
+
+def global_to_puck_voigt(s11,s22,s33,s12,s13,s23, phi_deg):
+    Tg = voigt6_to_tensor(s11,s22,s33,s12,s13,s23)
+    Trot = rotate_tensor_about1(Tg, phi_deg)    # (1,2',3')
+    Tp = to_puck_axes_from_rotated(Trot)        # (fiber,trans,thk)
+    return tensor_to_voigt6(Tp)
+
 
 # Fracture plane search
 theta_min_deg = -90
@@ -956,7 +967,7 @@ def puck_iff(s22, s33, s12, s13, s23):
             branch_crit = branch_here
     return fmax, branch_crit, theta_crit
 
-def failure_analysis(strain_limit=0.005):
+def failure_analysis(elem_to_phi, strain_limit=0.005):
     odb = openOdb(odbPath, readOnly=True)
     stepName = list(odb.steps.keys())[-1]
     step = odb.steps[stepName]
@@ -982,49 +993,43 @@ def failure_analysis(strain_limit=0.005):
         e11 = float(ed[0]) if len(ed) > 0 else 0.0
         e22 = float(ed[1]) if len(ed) > 1 else 0.0
         e33 = float(ed[2]) if len(ed) > 2 else 0.0
-        e12 = float(ed[3]) if len(ed) > 3 else 0.0  # (12) or (rz) depending on model
-        E_by_key[(inst_name, ev.elementLabel, ip, sp)] = (e11, e22, e33, e12)
+        e12 = float(ed[3]) if len(ed) > 3 else 0.0
+        e13 = float(ed[4]) if len(ed) > 4 else 0.0
+        e23 = float(ed[5]) if len(ed) > 5 else 0.0
+        E_by_key[(inst_name, ev.elementLabel, ip, sp)] = (e11, e22, e33, e12, e13, e23)
     base = os.path.splitext(os.path.basename(odbPath))[0]
-    out_csv = 'allCriteria_%s_IP.csv' % base
-    max_any = -1.0
-    max_any_elem = None
-    max_any_ip = None
-    max_any_inst = ''
-    max_any_crit = ''
-    max_tw = -1.0
-    max_tw_elem = None
-    max_tw_ip = None
-    max_tw_inst = ''
-    max_eps_tension = -1.0
-    max_eps_elem = None
-    max_eps_ip = None
-    max_eps_inst = ''
-    max_puck = -1.0
-    max_puck_elem = None
-    max_puck_ip = None
-    max_puck_inst = ''
+    out_csv = 'allCriteria_%s_IP_ply3D.csv' % base
+    max_any = -1.0;  max_any_elem=None; max_any_ip=None; max_any_inst=''; max_any_crit=''
+    max_tw  = -1.0;  max_tw_elem=None;  max_tw_ip=None;  max_tw_inst=''
+    max_eps_tension = -1.0; max_eps_elem=None; max_eps_ip=None; max_eps_inst=''
+    max_puck = -1.0; max_puck_elem=None; max_puck_ip=None; max_puck_inst=''
     missing_strain = 0
     with open(out_csv, 'w', newline='') as f:
         w = csv.writer(f)
         w.writerow([
             'odb','step','frameIndex','frameValue',
             'instance','elementLabel','integrationPoint','sectionPoint',
-            # stresses
+            # global stresses/strains
             'S11','S22','S33','S12','S13','S23',
-            # strains
-            'E11','E22','E33','E12',
-            # Tsai-Wu + strain limit
+            'E11','E22','E33','E12','E13','E23',
+            # ply
+            'phi_deg',
+            # stresses/strains in Puck lamina axes (1=fiber,2=trans,3=thk)
+            'S11_p','S22_p','S33_p','S12_p','S13_p','S23_p',
+            'E11_p','E22_p','E33_p','E12_p','E13_p','E23_p',
+            # criteria
             'TW','FAIL_TW(>=1)',
-            'max_tension_strain(E22+,E33+)','strain_limit','FAIL_tension_strain(>limit)',
-            # Puck
+            'max_tension_strain(max(E11_p+,E22_p+))','strain_limit','FAIL_tension_strain(>limit)',
             'Puck_FF','Puck_FF_t','Puck_FF_c','S_f_eff',
             'Puck_IFF','Puck_IFF_branch','theta_crit_deg',
             'FAIL_FF(>=1)','FAIL_IFF(>=1)',
-            # overall
             'FAIL_any'
         ])
         for sv in Sfield.values:
-            if sv.elementLabel in exclude_elems:
+            el = sv.elementLabel
+            if el in exclude_elems:
+                continue
+            if el not in elem_to_phi:
                 continue
             inst_name = sv.instance.name if sv.instance else ''
             ip = getattr(sv, 'integrationPoint', None)
@@ -1038,44 +1043,42 @@ def failure_analysis(strain_limit=0.005):
             s12 = float(sd[3]) if len(sd) > 3 else 0.0
             s13 = float(sd[4]) if len(sd) > 4 else 0.0
             s23 = float(sd[5]) if len(sd) > 5 else 0.0
-            key = (inst_name, sv.elementLabel, ip, sp)
+            phi = float(elem_to_phi[el])
+            # ---- full 3D transform to Puck lamina axes ----
+            s11p, s22p, s33p, s12p, s13p, s23p = global_to_puck_voigt(s11,s22,s33,s12,s13,s23, phi)
+            key = (inst_name, el, ip, sp)
             if key in E_by_key:
-                e11, e22, e33, e12 = E_by_key[key]
+                e11, e22, e33, e12, e13, e23 = E_by_key[key]
+                e11p, e22p, e33p, e12p, e13p, e23p = global_to_puck_voigt(e11,e22,e33,e12,e13,e23, phi)
             else:
                 missing_strain += 1
-                e11 = e22 = e33 = e12 = float('nan')
-            tw = tsai_wu_index(s22, s33, s23)
+                e11=e22=e33=e12=e13=e23=float('nan')
+                e11p=e22p=e33p=e12p=e13p=e23p=float('nan')
+            tw = tsai_wu_index(s11p, s22p, s12p)
             fail_tw = 1 if tw >= 1.0 else 0
             if tw > max_tw:
-                max_tw = tw
-                max_tw_elem = sv.elementLabel
-                max_tw_ip = ip
-                max_tw_inst = inst_name
-            if not (math.isnan(e22) or math.isnan(e33)):
-                e22_t = e22 if e22 > 0.0 else 0.0
-                e33_t = e33 if e33 > 0.0 else 0.0
-                max_tension = max(e22_t, e33_t)
-                fail_eps = 1 if (e22 > strain_limit or e33 > strain_limit) else 0
+                max_tw = tw; max_tw_elem = el; max_tw_ip = ip; max_tw_inst = inst_name
+            # ---- ply strain limit (tension in fiber/trans) ----
+            if not (math.isnan(e11p) or math.isnan(e22p)):
+                e11t = e11p if e11p > 0.0 else 0.0
+                e22t = e22p if e22p > 0.0 else 0.0
+                max_tension = max(e11t, e22t)
+                fail_eps = 1 if (e11p > strain_limit or e22p > strain_limit) else 0
                 if max_tension > max_eps_tension:
-                    max_eps_tension = max_tension
-                    max_eps_elem = sv.elementLabel
-                    max_eps_ip = ip
-                    max_eps_inst = inst_name
+                    max_eps_tension = max_tension; max_eps_elem = el; max_eps_ip = ip; max_eps_inst = inst_name
             else:
-                max_tension = float('nan')
-                fail_eps = 0
-            ff, ff_t, ff_c, s_f_eff = puck_ff(s22, s11, s33)
-            iff, iff_branch, theta_star = puck_iff(s33, s11, s23, s12, s13)
+                max_tension = float('nan'); fail_eps = 0
+            ff, ff_t, ff_c, s_f_eff = puck_ff(s11p, s22p, s33p)
+            iff, iff_branch, theta_star = puck_iff(s22p, s33p, s12p, s13p, s23p)
             fail_ff = 1 if ff >= 1.0 else 0
             fail_iff = 1 if iff >= 1.0 else 0
             fail_any = 1 if (fail_tw or fail_eps or fail_ff or fail_iff) else 0
-            # Track worst across all criteria (TW vs eps vs puck)
-            worst = max(tw, max_tension if not math.isnan(max_tension) else -1.0, ff, iff)
+            # Track worst across all criteria
+            worst = max(tw,
+                        max_tension if not math.isnan(max_tension) else -1.0,
+                        ff, iff)
             if worst > max_any:
-                max_any = worst
-                max_any_elem = sv.elementLabel
-                max_any_ip = ip
-                max_any_inst = inst_name
+                max_any = worst; max_any_elem = el; max_any_ip = ip; max_any_inst = inst_name
                 if worst == tw:
                     max_any_crit = 'Tsai-Wu'
                 elif worst == ff:
@@ -1083,19 +1086,18 @@ def failure_analysis(strain_limit=0.005):
                 elif worst == iff:
                     max_any_crit = 'Puck_IFF'
                 else:
-                    max_any_crit = 'Permeation_strain'
-            # Track worst puck (max of FF/IFF)
+                    max_any_crit = 'Strain_limit'
             worst_puck = max(ff, iff)
             if worst_puck > max_puck:
-                max_puck = worst_puck
-                max_puck_elem = sv.elementLabel
-                max_puck_ip = ip
-                max_puck_inst = inst_name
+                max_puck = worst_puck; max_puck_elem = el; max_puck_ip = ip; max_puck_inst = inst_name
             w.writerow([
                 base, step.name, frameIndex, frame.frameValue,
-                inst_name, sv.elementLabel, ip, str(sp) if sp is not None else '',
-                s11, s22, s33, s12, s13, s23,
-                e11, e22, e33, e12,
+                inst_name, el, ip, str(sp) if sp is not None else '',
+                s11,s22,s33,s12,s13,s23,
+                e11,e22,e33,e12,e13,e23,
+                phi,
+                s11p,s22p,s33p,s12p,s13p,s23p,
+                e11p,e22p,e33p,e12p,e13p,e23p,
                 tw, fail_tw,
                 max_tension, strain_limit, fail_eps,
                 ff, ff_t, ff_c, s_f_eff,
@@ -1107,25 +1109,24 @@ def failure_analysis(strain_limit=0.005):
     print("Wrote:", out_csv)
     if missing_strain:
         print("WARNING: %d integration-point stress entries had no matching integration-point strain entry." % missing_strain)
-    print("Max Tsai–Wu (IP): %.4f" % max_tw)
+    print("Max Tsai–Wu (ply/IP): %.4f" % max_tw)
     print("  Instance      :", max_tw_inst)
     print("  Element label :", max_tw_elem)
     print("  Integration pt:", max_tw_ip)
-    print("Max tension max(E22+,E33+) (IP): %.6f (limit %.6f)" % (max_eps_tension, strain_limit))
+    print("Max tension max(E11_p+,E22_p+) (ply/IP): %.6f (limit %.6f)" % (max_eps_tension, strain_limit))
     print("  Instance      :", max_eps_inst)
     print("  Element label :", max_eps_elem)
     print("  Integration pt:", max_eps_ip)
-    print("Max(Puck FF/IFF) (IP): %.4f" % max_puck)
+    print("Max(Puck FF/IFF) (ply/IP): %.4f" % max_puck)
     print("  Instance      :", max_puck_inst)
     print("  Element label :", max_puck_elem)
     print("  Integration pt:", max_puck_ip)
-    print("Max(ANY criterion) (IP): %.4f  [%s]" % (max_any, max_any_crit))
+    print("Max(ANY criterion) (ply/IP): %.4f  [%s]" % (max_any, max_any_crit))
     print("  Instance      :", max_any_inst)
     print("  Element label :", max_any_elem)
     print("  Integration pt:", max_any_ip)
 
-
-failure_analysis(strain_limit=0.005)
+failure_analysis(elem_to_phi, strain_limit=0.005)
 
 
 ################################## Seperate - Tsai Wu, Strain and Pucks code ####################################
@@ -1241,7 +1242,7 @@ def tw_and_tension_strain_limit_integration_point(strain_limit=0.005):
 # tw_and_tension_strain_limit_integration_point(strain_limit=0.005)
 
 
-def tsai_wu_failure():
+def tsai_wu_failure_lamina(elem_to_phi):
     odb = openOdb(odbPath, readOnly=True)
     stepName = list(odb.steps.keys())[-1]
     step = odb.steps[stepName]
@@ -1251,44 +1252,55 @@ def tsai_wu_failure():
         raise RuntimeError("Stress output 'S' not found in ODB frame.")
     Sfield = frame.fieldOutputs['S'].getSubset(position=ELEMENT_NODAL)
     base = os.path.splitext(os.path.basename(odbPath))[0]
-    out_csv = 'tsaiwu_%s_axisym_elementNodal.csv' % base
+    out_csv = 'tsaiwu_%s_lamina_elementNodal.csv' % base
     with open(out_csv, 'w', newline='') as f:
         w = csv.writer(f)
         w.writerow([
             'odb','step','frameIndex','frameValue',
             'instance','elementLabel','nodeLabel',
-            'S_rr(S11)','S_zz(S22)','S_tt(S33)','T_rz(S12)',
-            'TW_zz_tt','fails(>=1)'
+            'phi_deg',
+            'S22_mer','S33_hoop','S23_mer_hoop',
+            'sig_fiber','sig_trans','tau_f_t',
+            'TsaiWu','fails(>=1)'
         ])
         max_tw = -1.0
         max_elem = None
         max_node = None
         for v in Sfield.values:
-            if v.elementLabel in exclude_elems:
+            el = v.elementLabel
+            if el in exclude_elems:
                 continue
-            s11 = float(v.data[0])  # rr
-            s22 = float(v.data[1])  # zz
-            s33 = float(v.data[2])  # theta-theta
-            s12 = float(v.data[3]) if len(v.data) > 3 else 0.0
-            s23 = 0.0
-            tw = tsai_wu_index(s22, s33, s23)
+            if el not in elem_to_phi:
+                continue
+            phi = float(elem_to_phi[el])
+            s22 = float(v.data[1])  # meridional
+            s33 = float(v.data[2])  # hoop
+            # Prefer S23 (mer-hoop shear)
+            s23 = float(v.data[5]) if len(v.data) >= 6 else 0.0
+            sig_f, sig_t, tau_ft = rotate_stress_23_to_lamina(s22, s33, s23, phi)
+            tw = tsai_wu_index(sig_f, sig_t, tau_ft)
             fail = 1 if tw >= 1.0 else 0
             if tw > max_tw:
                 max_tw = tw
-                max_elem = v.elementLabel
-                max_node = v.nodeLabel
+                max_elem = el
+                max_node = getattr(v, 'nodeLabel', None)
             inst_name = v.instance.name if v.instance else ''
             w.writerow([
                 base, step.name, frameIndex, frame.frameValue,
-                inst_name, v.elementLabel, v.nodeLabel,
-                s11, s22, s33, s12,
+                inst_name, el, getattr(v, 'nodeLabel', None),
+                phi,
+                s22, s33, s23,
+                sig_f, sig_t, tau_ft,
                 tw, fail
             ])
     odb.close()
     print("Wrote:", out_csv)
-    print("Max Tsai–Wu (ELEMENT_NODAL): %.4f" % max_tw)
+    print("Max Tsai–Wu (lamina): %.4f" % max_tw)
     print("  Element label :", max_elem)
     print("  Node label    :", max_node)
+
+# tsai_wu_failure_lamina(elem_to_phi)
+
 
 def plane_strain_limit_check(limit=0.005):
     """
