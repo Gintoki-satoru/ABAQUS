@@ -1,38 +1,45 @@
-R = 180;     % Radius [mm]
-t_tot     = 0.16*6;     % total thickness [mm]
-R_mid = 180 + t/2;
-Pi    = 0.1;      
-Po    = 0.0;
-
-angles_deg = [0, 60, -60, -60, 60, 0];
+angles_deg = [0,45,-45,0, 0, -45, 45, 0];
 Nply = numel(angles_deg);
+R = 241.09;     % Radius [mm]
+t_tot     = 0.16*Nply;     % total thickness [mm]
+R_mid = 241.09 + t_tot/2;
+Pi    = 1;      
+Po    = 0.0;
 
 % Ply thicknesses [mm]
 t_ply = t_tot / Nply;
 tply  = t_ply * ones(1,Nply);
 
 % UD lamina properties (plane stress) in MPa
-E1  = 161000;    % [MPa]
-E2  = 11380;     % [MPa]
-G12 = 5200;      % [MPa]
-nu12 = 0.32;
+E1  = 171000;    % [MPa]
+E2  = 8530;     % [MPa]
+G12 = 5630;      % [MPa]
+nu12 = 0.287;
 % (nu21 derived)
 nu21 = nu12*E2/E1;
 
 % ----------------------- MEMBRANE LOADS -----------------------
 p = (Pi - Po);                    % [MPa]
-sigma_phi   = p*R_mid/(2*t_tot);  % [MPa]
-sigma_theta = sigma_phi;          % [MPa]
-tau_phitheta = 0.0;
+% sigma_phi   = p*R_mid/(2*t_tot);  % [MPa]
+% sigma_theta = sigma_phi;          % [MPa]
+% tau_phitheta = 0.0;
+% 
+% % Membrane resultants [MPa*mm = N/mm]
+% Nx  = sigma_phi   * t_tot;
+% Ny  = sigma_theta * t_tot;
+% Nxy = tau_phitheta * t_tot;
 
-% Membrane resultants [MPa*mm = N/mm]
-Nx  = sigma_phi   * t_tot;
-Ny  = sigma_theta * t_tot;
-Nxy = tau_phitheta * t_tot;
+% Nvec = [Nx; Ny; Nxy];
+% 
+% % No moments in pure membrane loading
+% Mvec = [0; 0; 0];
 
-Nvec = [Nx; Ny; Nxy];
+% Resultants from spherical equilibrium (valid regardless of laminate)
+Nphi   = p*R_mid/2;          % MPa*mm = N/mm
+Ntheta = p*R_mid/2;          % MPa*mm
+Nxy    = 0;
 
-% No moments in pure membrane loading
+Nvec = [Nphi; Ntheta; Nxy];
 Mvec = [0; 0; 0];
 
 % ----------------------- BUILD ABD -----------------------
@@ -172,7 +179,7 @@ Xc = -1705.3;
 Yt = 55.701;
 Yc = -367.44;
 S  = 199.11;
-theta = [0, 60, -60, -60, 60, 0];
+theta = angles_deg;
 Nplies = size(sigmaxy,2);
 
 % --- Tsai-Wu coefficients (plane stress 1-2) ---
@@ -204,15 +211,6 @@ for k = 1:Nplies
     % --- Tsai-Wu failure index ---
     TW_index(k) = H1*s1 + H2*s2 + H11*s1^2 + H22*s2^2 + H66*t12^2 + 2*H12*s1*s2;
 end
-
-% --- Plot stresses---
-figure; hold on; grid on;
-plot(z_mid, sigmaxy(1,:), '-o', 'LineWidth', 1.5);
-plot(z_mid, sigmaxy(2,:), '-o', 'LineWidth', 1.5);
-plot(z_mid, sigmaxy(3,:), '-o', 'LineWidth', 1.5);
-xlabel('z (mm)'); ylabel('Stress (MPa)');
-title('Global (x-y) ply mid-surface stresses from CLT');
-legend('\sigma_x (meridional)','\sigma_y (hoop)','\tau_{xy}','Location','best');
 
 % --- Plot Tsai-Wu index ---
 figure; hold on; grid on;

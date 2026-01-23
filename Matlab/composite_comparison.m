@@ -1,4 +1,4 @@
-% --- Abaqus extracted data: [h(mm)  S_rr  S_meridional  S_hoop  tau_merid_hoop] ---
+% --- Abaqus extracted data: 0/60/-60/-60/60/0 ---
 abaqus_data = [
     0.000000   -0.0999638   17.2204    1.52995   -0.000157163
     0.000000   -0.1000500   17.2187    1.52979    2.63E-05
@@ -96,6 +96,119 @@ plot(h_all_c, sigma_tau_abaq, '-','DisplayName', 'Abaqus');
 
 % Marie sol
 plot(h_all, tau_phitheta,'--','DisplayName', 'Marie');
+
+xlabel('Thickness coordinate z [mm]');
+ylabel('\tau_{\phi\theta} [MPa]');
+title('In-plane shear stress through thickness');
+legend('Location','best');
+
+%% --- Abaqus extracted data: 0/45/-45/90/90/-45/45/0 ---
+data = [
+    0        12.9256   0        1.13777   0        8.23E-06
+    0.159978 12.9103  0.159978 1.14147   0.159978 3.95E-05
+    0.159978 7.02577  0.159978 7.02592   0.159978 -9.23E-05
+    0.319973 7.01958  0.159978 7.02572   0.159978 5.88445
+    0.319973 7.01908  0.319973 7.01964   0.159978 5.88416
+    0.479955 7.01337  0.319973 7.0191    0.319973 5.87451
+    0.479955 7.01337  0.479955 7.01328   0.319973 -5.87387
+    0.479955 1.15262  0.479955 12.8768   0.479955 -5.8644
+    0.63995  1.15262  0.479955 12.8768   0.479955 -5.8644
+    0.79994  1.15634  0.63995  12.8599   0.479955 2.29E-05
+    0.79994  6.99954  0.79994  12.8435   0.63995  2.29E-05
+    0.79994  6.99983  0.79994  6.99953   0.63995  2.29E-05
+    0.959922 6.99358  0.79994  6.99982   0.79994 -2.37E-05
+    0.959922 6.99331  0.959922 6.99368   0.79994 -5.84322
+    1.11992  6.98719  0.959922 6.99328   0.79994 -5.84352
+    1.11992  6.98703  1.11992  6.9874    0.959922 -5.83373
+    1.11992  12.7929  1.11992  6.9874    0.959922 5.83364
+    1.2799   12.7929  1.11992  1.16733   0.959922 -5.8336
+    1.2799   12.7941  1.2799   1.16733   0.959922 5.83321
+    NaN      NaN      NaN      NaN       1.11992  5.8238
+    NaN      NaN      NaN      NaN       1.11992 -4.49E-05
+    NaN      NaN      NaN      NaN       1.11992 -4.49E-05
+    NaN      NaN      NaN      NaN       1.2799  -1.64E-05
+];
+
+T = array2table(data, 'VariableNames', ...
+    {'thickness_m', 'S_meridional', ...
+     'thickness_h', 'S_hoop', ...
+     'thickness_tau', 'tau_merid_hoop'});
+
+thick_m = data(:,1);
+S_mer   = data(:,2);
+
+thick_h = data(:,3);
+S_hoop  = data(:,4);
+
+thick_t = data(:,5);
+tau_mh  = data(:,6);
+
+% Total thickness from Abaqus data
+t = max(thick_h);
+
+% Center Abaqus thickness coordinate about mid-plane
+h_all_c = thick_h - t/2;
+
+% hoop stress##########################################
+figure; hold on; grid on;
+% CLT hoop stress (ply mid-surfaces)
+plot(z_mid, sigmaxy(2,:), '-o', ...
+     'LineWidth', 1.5, ...
+     'DisplayName', 'CLT (ply mid-surface)');
+
+% Abaqus hoop stress (integration points)
+plot(h_all_c, S_hoop, '-s', 'DisplayName', 'Abaqus')
+
+% Marie sol
+plot(h_all, sigma_theta,'--','DisplayName', '3D Elasticity');
+
+xlabel('Thickness coordinate z [mm]');
+ylabel('\sigma_\theta [MPa]');
+title('Hoop stress through thickness');
+legend('Location','best');
+
+% Total thickness from Abaqus data
+t = max(thick_m);
+
+% Center Abaqus thickness coordinate about mid-plane
+h_all_m = thick_m - t/2;
+
+% Merid stress##########################################
+figure; hold on; grid on;
+% CLT hoop stress (ply mid-surfaces)
+plot(z_mid, sigmaxy(1,:), '-o', ...
+     'LineWidth', 1.5, ...
+     'DisplayName', 'CLT (ply mid-surface)');
+
+% Abaqus hoop stress (integration points)
+plot(h_all_m, S_mer, '-o', 'DisplayName', 'Abaqus');
+
+% Marie sol
+plot(h_all, sigma_phi,'--','DisplayName', '3D Elasticity');
+
+xlabel('Thickness coordinate z [mm]');
+ylabel('\sigma_\phi [MPa]');
+title('Meridional stress through thickness');
+legend('Location','best');
+
+% Total thickness from Abaqus data
+t = max(thick_t);
+
+% Center Abaqus thickness coordinate about mid-plane
+h_all_t = thick_t - t/2;
+
+% tau12 stress##########################################
+figure; hold on; grid on;
+% CLT hoop stress (ply mid-surfaces)
+plot(z_mid, sigmaxy(3,:), '-o', ...
+     'LineWidth', 1.5, ...
+     'DisplayName', 'CLT (ply mid-surface)');
+
+% Abaqus hoop stress (integration points)
+plot(h_all_t, tau_mh, '-^', 'DisplayName', 'Abaqus')
+
+% Marie sol
+plot(h_all, tau_phitheta,'--','DisplayName', '3D Elasticity');
 
 xlabel('Thickness coordinate z [mm]');
 ylabel('\tau_{\phi\theta} [MPa]');

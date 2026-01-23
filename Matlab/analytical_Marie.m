@@ -1,22 +1,40 @@
+% layup
+angles_deg = [0,45,-45,0, 0, -45, 45, 0];
+Nply = numel(angles_deg);
+
 % Geometry
-R = 180;     % Radius [mm]
-t     = 0.16*6;     % total thickness [mm]
-R_mid = 180 + t/2;
+R = 241.09;                 
+t = 0.16*Nply;           % total thickness [mm]
+tply = t / Nply;         % <-- move here
+R_mid = R + t/2;
 
 % Pressures
-Pi = 0.1;         % internal pressure [MPa]
+Pi = 1;         % internal pressure [MPa]
 Po = 0.0;          % external pressure [MPa]
 
-% Material properties - car_epx
-% E1  = 171000;       
-% E2  = 8530;
+% Material properties - car_epx - 20K
+% E2  = 173930;       
+% E1  = 15690;
+% E3  = 15690;
+% G12 = 11244;
+% G23 = 11244;
+% G13 = 5717.7;
+% nu21 = 0.433;
+% nu13 = 0.369;
+% nu23 = 0.433;
+% nu12 = nu21*E1/E2;
+
+% Material properties - car_epx - 293K
+% E2  = 171000;       
+% E1  = 8530;
 % E3  = 8530;
 % G12 = 5630;
-% G13 = 5630;
-% G23 = 2640;
-% nu12 = 0.287;
-% nu13 = 0.287;
-% nu23 = 0.369;
+% G23 = 5630;
+% G13 = 2640;
+% nu21 = 0.287;
+% nu13 = 0.369;
+% nu23 = 0.287;
+% nu12 = nu21*E1/E2;
 
 % Im7
 E2  = 161000;       
@@ -40,11 +58,6 @@ nu12 = nu21*E1/E2;
 % nu13 = 0.35;
 % nu23 = 0.27;
 % nu12 = nu21*E1/E2;
-
-% Quasi-isotropic symmetric layup
-angles_deg = [0, 60, -60, -60, 60, 0];
-Nply = numel(angles_deg);
-tply = t / Nply;
 
 % Through-thickness evaluation resolution per ply
 nPtsPerPly = 40;
@@ -159,9 +172,56 @@ ylabel('\tau_{\phi\theta} [MPa]');
 title('In-plane shear stress through thickness');
 xline(-t/2,'--'); xline(t/2,'--');
 
-%% ---------------------- OPTIONAL: EXPORT TABLE --------------------------
-T = table(r_all, h_all, ply_id, alpha_all, sigma_phi, sigma_theta, sigma_h, tau_phitheta);
-disp(T(1:10,:));
+%% Failure
+
+% ---------- MATERIAL STRENGTHS ----------
+Xt = 3179.2;
+Xc = -1705.3;
+Yt = 55.701;
+Yc = -367.44;
+S  = 199.11;
+
+% ---------- PUCK PARAMETERS ----------
+% Typical names: p12_t, p12_c (inclination parameters)
+p12_t = 0.30;
+p12_c = 0.35;
+
+sigma1 = zeros(size(sigma_h));   % lamina fiber-direction stress
+sigma2 = zeros(size(sigma_h));   % lamina transverse stress
+tau12  = zeros(size(sigma_h));   % lamina in-plane shear
+
+TW     = zeros(size(sigma_h));   % Tsai–Wu index
+PuckFF = zeros(size(sigma_h));   % Puck fiber failure index
+PuckIFF= zeros(size(sigma_h));   % Puck inter-fiber failure index
+
+for k = 1:Nply
+    ak = deg2rad(angles_deg(k));
+    idx = (ply_id == k);
+
+    % global stresses in your basis (1=radial, 2=meridional, 3=hoop)
+    s11 = sigma_h(idx);
+    s22 = sigma_phi(idx);
+    s33 = sigma_theta(idx);
+    s23 = tau_phitheta(idx);
+    s12 = zeros(size(s11));
+    s13 = zeros(size(s11));
+    
+    alpha = ak;
+    
+    [s11p,s22p,s33p,s12p,s13p,s23p] = rotate_stress_about_1_full( ...
+        s11,s22,s33,s12,s13,s23, alpha);
+    
+    % Use lamina in-plane components (Abaqus-style)
+    sf  = s22p;
+    st  = s33p;
+    tau = s23p;
+    TW(idx) = tsai_wu_2D(sf, st, tau, Xt, Xc, Yt, Yc, S);
+    [PuckFF(idx), PuckIFF(idx)] = puck_FF_IFF_2D(sf, st, tau, Xt, Xc, Yt, Yc, S, p12_t, p12_c);
+end
+
+fprintf('Max TW = %.3f\n', max(TW));
+fprintf('Max Puck FF = %.3f\n', max(PuckFF));
+fprintf('Max Puck IFF = %.3f\n', max(PuckIFF));
 
 %% ====================== FUNCTIONS =======================================
 
@@ -214,4 +274,54 @@ function Ck = rotate_C_about_1(C, alpha)
             0, 0, 0, 0,  nneg,  mneg ];
 
     Ck = T1m * C * T2;
+end
+
+function FI = tsai_wu_2D(sf, st, tau, Xt, Xc, Yt, Yc, S)
+    H1  = (1./Xt) - (1./Xc);
+    H2  = (1./Yt) - (1./Yc);
+    H11 = 1./(Xt.*Xc);
+    H22 = 1./(Yt.*Yc);
+    H66 = 1./(S.*S);
+    H12 = -0.5 .* sqrt(H11 .* H22);  % common choice
+
+    FI = H1.*sf + H2.*st + H11.*sf.^2 + H22.*st.^2 + H66.*tau.^2 + 2.*H12.*sf.*st;
+end
+
+function [FF, IFF] = puck_FF_IFF_2D(sf, st, tau, Xt, Xc, ~, Yc, S12, p_t, p_c)
+    x_c = -Xc;
+    y_c = - Yc;
+    % Fiber Failure (FF)
+    FF = zeros(size(sf));
+    FF(sf >= 0) = sf(sf >= 0)./Xt;
+    FF(sf <  0) = abs(sf(sf < 0))./x_c;
+
+    % Inter-Fiber Failure (IFF)
+    IFF = zeros(size(sf));
+
+    it = (st >= 0);   % transverse tension
+    stn  = st(it)./y_c;
+    taun = abs(tau(it))./S12;
+    IFF(it) = sqrt(taun.^2 + stn.^2) + p_t.*stn;
+
+    ic = (st < 0);    % transverse compression
+    stn  = abs(st(ic))./-Yc;
+    taun = abs(tau(ic))./S12;
+    IFF(ic) = sqrt(taun.^2 + stn.^2) + p_c.*stn;
+end
+
+function [s11p,s22p,s33p,s12p,s13p,s23p] = rotate_stress_about_1_full(s11,s22,s33,s12,s13,s23,alpha)
+    c = cos(alpha);
+    s = sin(alpha);
+
+    % Normal stress
+    s11p = s11;
+
+    % Shear components involving axis-1
+    s12p = c.*s12 + s.*s13;
+    s13p = -s.*s12 + c.*s13;
+
+    % 2-3 block
+    s22p = c.^2.*s22 + s.^2.*s33 + 2*c*s.*s23;
+    s33p = s.^2.*s22 + c.^2.*s33 - 2*c*s.*s23;
+    s23p = -c*s.*(s22 - s33) + (c.^2 - s.^2).*s23;
 end

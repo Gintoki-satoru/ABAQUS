@@ -62,15 +62,15 @@ myModel = mdb.models[modelName]
 
 #############################   PARAMETERS    #############################
 
-r_inner = 180     # semi-axis in a
-z_inner = 180     # semi-axis in c
+r_inner = 241.09     # semi-axis in a
+z_inner = 241.09     # semi-axis in c
 
 n = 1         # superellipse exponent
 
 n_spline = 150  # number of spline points
 N_theta = 10   # number of meridional regions
 
-plyAngle = [0, 60, -60, -60, 60, 0]  # stacking sequence (degrees)
+plyAngle = [0, 45, -45, 0, 0, -45, 45, 0]  # stacking sequence (degrees)
 thick   = 0.16*plyAngle.__len__()  # total thickness
 N_part = plyAngle.__len__()  # number of partitions through thickness
 
@@ -79,7 +79,7 @@ z_outer = z_inner + thick
 
 mesh_size = 0.25  # Mesh size
 
-Press = 0.1 # Pressure load
+Press = 1 # Pressure load
 compositeMaterialName = 'im7_epx'  # 'cfk', 'AL', 'gfk', 'cfknew', 'car_epx', 'im7_epx'
 
 # Strength parameters

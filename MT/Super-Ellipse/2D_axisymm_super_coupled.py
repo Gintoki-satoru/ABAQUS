@@ -75,14 +75,14 @@ n = 1         # superellipse exponent
 n_spline = 150  # number of spline points
 N_theta = 10   # number of meridional regions
 
-plyAngle = [45,-45,0,0,45,-45,0,0,45,-45,0,0,45,-45]  # stacking sequence (degrees)
+plyAngle = [90,45,-45,90, 90, -45, 45, 90]  # stacking sequence (degrees)
 thick   = 0.16*plyAngle.__len__()  # total thickness
 N_part = plyAngle.__len__()  # number of partitions through thickness
 
 r_outer = r_inner + thick
 z_outer = z_inner + thick
 
-mesh_size = 0.3  # Mesh size
+mesh_size = 0.25  # Mesh size
 
 Press = 1 # Pressure load
 compositeMaterialName = 'car_epx'  # 'cfk', 'AL', 'gfk', 'cfknew', 'car_epx', 'im7_epx'
@@ -1297,14 +1297,14 @@ def tsai_wu_failure_lamina(elem_to_phi):
     frame = step.frames[frameIndex]
     if 'S' not in frame.fieldOutputs:
         raise RuntimeError("Stress output 'S' not found in ODB frame.")
-    Sfield = frame.fieldOutputs['S'].getSubset(position=ELEMENT_NODAL)
+    Sfield = frame.fieldOutputs['S'].getSubset(position=INTEGRATION_POINT)
     base = os.path.splitext(os.path.basename(odbPath))[0]
     out_csv = 'tsaiwu_%s_lamina_elementNodal.csv' % base
     with open(out_csv, 'w', newline='') as f:
         w = csv.writer(f)
         w.writerow([
             'odb','step','frameIndex','frameValue',
-            'instance','elementLabel','nodeLabel',
+            'instance','elementLabel',
             'phi_deg',
             'S22_mer','S33_hoop','S23_mer_hoop',
             'sig_fiber','sig_trans','tau_f_t',
@@ -1312,39 +1312,45 @@ def tsai_wu_failure_lamina(elem_to_phi):
         ])
         max_tw = -1.0
         max_elem = None
-        max_node = None
-        for v in Sfield.values:
-            el = v.elementLabel
+        for sv in Sfield.values:
+            el = sv.elementLabel
             if el in exclude_elems:
                 continue
             if el not in elem_to_phi:
                 continue
+            inst_name = sv.instance.name if sv.instance else ''
+            ip = getattr(sv, 'integrationPoint', None)
+            sp = getattr(sv, 'sectionPoint', None)
+            if ip is None:
+                continue
+            sd = sv.data
             phi = float(elem_to_phi[el])
-            s22 = float(v.data[1])  # meridional
-            s33 = float(v.data[2])  # hoop
-            # Prefer S23 (mer-hoop shear)
-            s23 = float(v.data[5]) if len(v.data) >= 6 else 0.0
-            sig_f, sig_t, tau_ft = rotate_stress_23_to_lamina(s22, s33, s23, phi)
-            tw = tsai_wu_index(sig_f, sig_t, tau_ft)
+            s11 = float(sd[0]) if len(sd) > 0 else 0.0
+            s22 = float(sd[1]) if len(sd) > 1 else 0.0
+            s33 = float(sd[2]) if len(sd) > 2 else 0.0
+            s12 = float(sd[3]) if len(sd) > 3 else 0.0
+            s13 = float(sd[4]) if len(sd) > 4 else 0.0
+            s23 = float(sd[5]) if len(sd) > 5 else 0.0
+            phi = float(elem_to_phi[el])
+            # ---- full 3D transform to Puck lamina axes ----
+            s11p, s22p, s33p, s12p, s13p, s23p = global_to_puck_voigt(s11,s22,s33,s12,s13,s23, phi)
+            tw = tsai_wu_index(s11p, s22p, s12p)
             fail = 1 if tw >= 1.0 else 0
             if tw > max_tw:
                 max_tw = tw
                 max_elem = el
-                max_node = getattr(v, 'nodeLabel', None)
-            inst_name = v.instance.name if v.instance else ''
             w.writerow([
                 base, step.name, frameIndex, frame.frameValue,
-                inst_name, el, getattr(v, 'nodeLabel', None),
+                inst_name, el,
                 phi,
                 s22, s33, s23,
-                sig_f, sig_t, tau_ft,
+                s11p, s22p, s12p,
                 tw, fail
             ])
     odb.close()
     print("Wrote:", out_csv)
     print("Max Tsai–Wu (lamina): %.4f" % max_tw)
     print("  Element label :", max_elem)
-    print("  Node label    :", max_node)
 
 # tsai_wu_failure_lamina(elem_to_phi)
 
