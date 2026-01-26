@@ -70,7 +70,7 @@ n = 1         # superellipse exponent
 n_spline = 150  # number of spline points
 N_theta = 10   # number of meridional regions
 
-plyAngle = [0, 45, -45, 0, 0, -45, 45, 0]  # stacking sequence (degrees)
+plyAngle = [0, 45, -45, 45]  # stacking sequence (degrees)
 thick   = 0.16*plyAngle.__len__()  # total thickness
 N_part = plyAngle.__len__()  # number of partitions through thickness
 
@@ -306,7 +306,7 @@ for k in range(N_part):
         print("WARNING: No faces found for layer", k)
 
 ################# Surface creation ###################
-N_sample = 40   # more than enough
+N_sample = 40
 theta_vals = np.linspace(0.0, math.pi/2.0, N_sample+2)[1:-1]
 
 s2 = p.edges
@@ -445,7 +445,7 @@ def materialComposite():
         """
         Rotate compliance about LOCAL axis-1 (radial/thickness) by phi in the 2-3 plane (axial-hoop).
 
-        Local axes convention USED HERE (same as your current code):
+        Local axes convention:
           1 = radial/thickness
           2 = axial (fiber direction at phi=0)
           3 = hoop  (fiber direction at phi=90)
@@ -456,7 +456,7 @@ def materialComposite():
         phi_rad = math.radians(phi_deg)
         c = math.cos(phi_rad)
         s = math.sin(phi_rad)
-        # Base compliance in material axes (1=radial, 2=fiber@0, 3=hoop/transverse)
+        # Base compliance in material axes
         S0 = np.zeros((6, 6))
         S0[0, 0] = 1.0 / E1
         S0[1, 1] = 1.0 / E2
@@ -468,7 +468,6 @@ def materialComposite():
         S0[4, 4] = 1.0 / G13  # 13
         S0[5, 5] = 1.0 / G12  # 12
         # Stress transformation in Voigt for rotation about axis-1 in 2-3 plane
-        # Voigt ordering assumed: [11,22,33,23,13,12]
         T = np.array([
             [1,        0,        0,        0,        0,        0],
             [0,        c*c,      s*s,      2*c*s,    0,        0],

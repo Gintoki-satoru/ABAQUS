@@ -1,15 +1,15 @@
 % layup
-angles_deg = [0,45,-45,0, 0, -45, 45, 0];
+angles_deg = [0,60,-60,-60, 60, 0];
 Nply = numel(angles_deg);
 
 % Geometry
-R = 241.09;                 
+R = 180;                 
 t = 0.16*Nply;           % total thickness [mm]
 tply = t / Nply;         % <-- move here
 R_mid = R + t/2;
 
 % Pressures
-Pi = 1;         % internal pressure [MPa]
+Pi = 0.1;         % internal pressure [MPa]
 Po = 0.0;          % external pressure [MPa]
 
 % Material properties - car_epx - 20K

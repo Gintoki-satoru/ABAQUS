@@ -75,7 +75,7 @@ n = 1         # superellipse exponent
 n_spline = 150  # number of spline points
 N_theta = 10   # number of meridional regions
 
-plyAngle = [90,45,-45,90, 90, -45, 45, 90]  # stacking sequence (degrees)
+plyAngle = [0,-30,60,30]  # stacking sequence (degrees)
 thick   = 0.16*plyAngle.__len__()  # total thickness
 N_part = plyAngle.__len__()  # number of partitions through thickness
 
@@ -458,7 +458,7 @@ def materialComposite():
         """
         Rotate compliance about LOCAL axis-1 (radial/thickness) by phi in the 2-3 plane (axial-hoop).
 
-        Local axes convention USED HERE (same as your current code):
+        Local axes convention USED HERE:
           1 = radial/thickness
           2 = axial (fiber direction at phi=0)
           3 = hoop  (fiber direction at phi=90)
@@ -630,6 +630,10 @@ mdb.models[modelName].CoupledTempDisplacementStep(name='LoadingStep',
     previous='Initial', description='LoadingStep', response=STEADY_STATE, 
     deltmx=None, cetol=None, creepIntegration=None, amplitude=RAMP)
 
+mdb.models['EllipseModel_2D'].fieldOutputRequests['F-Output-1'].setValues(
+    variables=('S', 'PE', 'PEEQ', 'PEMAG', 'LE', 'U', 'RF', 'CF', 'CSTRESS', 
+    'CDISP', 'NT', 'HFL', 'RFL', 'COORD'))
+
 # mdb.models[modelName].StaticStep(name='LoadingStep', previous='Initial', 
 #     initialInc=1, minInc=1e-05, maxInc=1.0)
 
@@ -686,7 +690,7 @@ mdb.models['EllipseModel_2D'].SurfaceHeatFlux(name='HeatFlux-1',
 ################# MESHING ###################
 p = mdb.models['EllipseModel_2D'].parts['SuperEllipsoid_2D']
 p.seedPart(size=mesh_size, deviationFactor=0.01, minSizeFactor=0.1)
-elemType1 = mesh.ElemType(elemCode=CGAX8RT, elemLibrary=STANDARD)
+elemType1 = mesh.ElemType(elemCode=CGAX4RT, elemLibrary=STANDARD)
 faces1 = p.faces.getByBoundingBox(
     xMin=-1e6, yMin=-1e6, zMin=-1e6,
     xMax=+1e6, yMax=+1e6, zMax=+1e6
@@ -728,79 +732,12 @@ def layer_index_from_delta(delta, thick, N_part):
 def layer_mid_delta(k, thick, N_part):
     return (k + 0.5) * thick / float(N_part)
 
-
-# elem = p.elements[0]        # just one element
-# elemLabel = elem.label
-
-# node_ids = elem.connectivity
-# coords = [p.nodes[i].coordinates for i in node_ids]
-
-# node_ids = elem.connectivity
-# coords = [p.nodes[i].coordinates for i in node_ids]
-
-# r = [c[0] for c in coords]   # X = radial (r)
-# z = [c[1] for c in coords]   # Y = axial  (z)
-
-# node_ids = elem.connectivity
-# coords = [p.nodes[i].coordinates for i in node_ids]
-
-# r = [c[0] for c in coords]   # X = radial (r)
-# z = [c[1] for c in coords]   # Y = axial  (z)
-
-# r_c = sum(r) / len(r)
-# z_c = sum(z) / len(z)
-
-# delta = solve_delta_for_point(r_c, z_c, r_inner, z_inner, thick, 2/n)
-# if delta is None:
-#     print("Centroid not between inner/outer surfaces (no root in [0,thick]).")
-# else:
-#     a_ref = r_inner + delta
-#     c_ref = z_inner + delta
-
-# delta = solve_delta_for_point(r_c, z_c, r_inner, z_inner, thick, 2/n)
-# k = layer_index_from_delta(delta, thick, N_part)
-# delta_ref = layer_mid_delta(k, thick, N_part)
-
-# a_ref = r_inner + delta_ref
-# c_ref = z_inner + delta_ref
-
-
-# # a_ref = r_inner + 0.5*thick
-# # c_ref = z_inner + 0.5*thick
-# n_r, n_z = surface_normal_rz(r_c, z_c, a_ref, c_ref, n)
-
-# # tangent = 90° rotation in r–z plane
-# t_r = -n_z
-# t_z =  n_r
-
-# dcsys = p.DatumCsysByThreePoints(
-#     name='CSYS_try_%d' % elemLabel,
-#     coordSysType=CARTESIAN,
-#     origin=(r_c, z_c, 0.0),
-#     point1=(r_c + t_r, z_c + t_z, 0.0),   # X = tangent
-#     point2=(r_c + n_r, z_c + n_z, 0.0)    # Y = normal
-# )
-
-# elemSet = p.SetFromElementLabels(
-#     name='ONE_try',
-#     elementLabels=(elemLabel,)
-# )
-
-# p.MaterialOrientation(
-#     region=elemSet,
-#     orientationType=SYSTEM,
-#     localCsys=p.datums[dcsys.id],
-#     axis=AXIS_3,
-#     angle=90.0,
-#     additionalRotationType=ROTATION_ANGLE,
-#     stackDirection=STACK_3
-# )
-
 r_cutoff = 4.0
 z_cutoff = 4.0
 exclude_elems = set()
 elem_to_phi = {}
 elem_to_k   = {}
+layer_to_elems = {}
 
 for elem in p.elements:
     elemLabel = elem.label
@@ -825,6 +762,9 @@ for elem in p.elements:
         continue   # skip elements outside the wall
     # --- map to thickness layer ---
     k = layer_index_from_delta(delta, thick, N_part)
+    if k not in layer_to_elems:
+        layer_to_elems[k] = []
+    layer_to_elems[k].append(elemLabel)
     phi = plyAngle[k]
     elem_to_k[elemLabel] = k
     elem_to_phi[elemLabel] = phi
@@ -863,6 +803,13 @@ p.SetFromElementLabels(
     name='EXCLUDE_TS_WU',
     elementLabels=list(exclude_elems)
 )
+
+for k in sorted(layer_to_elems.keys()):
+    set_name = 'PLY_%02d' % k
+    p.SetFromElementLabels(
+        name=set_name,
+        elementLabels=layer_to_elems[k]
+    )
 
 session.viewports['Viewport: 1'].partDisplay.geometryOptions.setValues(
     datumCoordSystems=OFF)

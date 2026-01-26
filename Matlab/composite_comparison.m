@@ -1,4 +1,4 @@
-% --- Abaqus extracted data: 0/60/-60/-60/60/0 ---
+% --- Abaqus extracted data: 0/60/-60/-60/60/0 --- r 0 180, mat = im7
 abaqus_data = [
     0.000000   -0.0999638   17.2204    1.52995   -0.000157163
     0.000000   -0.1000500   17.2187    1.52979    2.63E-05
@@ -52,14 +52,14 @@ h_all_c = h_all_abaqus - t/2;
 figure; hold on; grid on;
 % CLT hoop stress (ply mid-surfaces)
 plot(z_mid, sigmaxy(2,:), '-o', ...
-     'LineWidth', 1.5, ...
+     'LineWidth', 1, ...
      'DisplayName', 'CLT (ply mid-surface)');
 
 % Abaqus hoop stress (integration points)
-plot(h_all_c, sigma_theta_abaq, '-','DisplayName', 'Abaqus');
+plot(h_all_c, sigma_theta_abaq, '-','LineWidth', 2,'DisplayName', 'Abaqus');
 
 % Marie sol
-plot(h_all, sigma_theta,'--','DisplayName', 'Marie');
+plot(h_all, sigma_theta,'--','DisplayName', '3D Elasticity');
 
 xlabel('Thickness coordinate z [mm]');
 ylabel('\sigma_\theta [MPa]');
@@ -70,14 +70,14 @@ legend('Location','best');
 figure; hold on; grid on;
 % CLT hoop stress (ply mid-surfaces)
 plot(z_mid, sigmaxy(1,:), '-o', ...
-     'LineWidth', 1.5, ...
+     'LineWidth', 1, ...
      'DisplayName', 'CLT (ply mid-surface)');
 
 % Abaqus hoop stress (integration points)
-plot(h_all_c, sigma_merid_abaq, '-','DisplayName', 'Abaqus');
+plot(h_all_c, sigma_merid_abaq, '-','LineWidth', 2,'DisplayName', 'Abaqus');
 
 % Marie sol
-plot(h_all, sigma_phi,'--','DisplayName', 'Marie');
+plot(h_all, sigma_phi,'--','DisplayName', '3D Elasticity');
 
 xlabel('Thickness coordinate z [mm]');
 ylabel('\sigma_\phi [MPa]');
@@ -88,14 +88,14 @@ legend('Location','best');
 figure; hold on; grid on;
 % CLT hoop stress (ply mid-surfaces)
 plot(z_mid, sigmaxy(3,:), '-o', ...
-     'LineWidth', 1.5, ...
+     'LineWidth', 1, ...
      'DisplayName', 'CLT (ply mid-surface)');
 
 % Abaqus hoop stress (integration points)
-plot(h_all_c, sigma_tau_abaq, '-','DisplayName', 'Abaqus');
+plot(h_all_c, sigma_tau_abaq, '-','LineWidth', 2,'DisplayName', 'Abaqus');
 
 % Marie sol
-plot(h_all, tau_phitheta,'--','DisplayName', 'Marie');
+plot(h_all, tau_phitheta,'--','DisplayName', '3D Elasticity');
 
 xlabel('Thickness coordinate z [mm]');
 ylabel('\tau_{\phi\theta} [MPa]');

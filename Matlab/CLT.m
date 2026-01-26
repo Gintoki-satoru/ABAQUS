@@ -1,8 +1,8 @@
-angles_deg = [0,45,-45,0, 0, -45, 45, 0];
+angles_deg = [90,45,-45,90, 90, -45, 45, 90];
 Nply = numel(angles_deg);
 R = 241.09;     % Radius [mm]
 t_tot     = 0.16*Nply;     % total thickness [mm]
-R_mid = 241.09 + t_tot/2;
+R_mid = R + t_tot/2;
 Pi    = 1;      
 Po    = 0.0;
 
@@ -10,31 +10,24 @@ Po    = 0.0;
 t_ply = t_tot / Nply;
 tply  = t_ply * ones(1,Nply);
 
-% UD lamina properties (plane stress) in MPa
-E1  = 171000;    % [MPa]
-E2  = 8530;     % [MPa]
-G12 = 5630;      % [MPa]
-nu12 = 0.287;
-% (nu21 derived)
+% UD lamina properties in MPa - 20K car epx
+E1  = 173930;    % [MPa]
+E2  = 15690;     % [MPa]
+G12 = 11244;      % [MPa]
+nu12 = 0.433;
 nu21 = nu12*E2/E1;
+
+% UD lamina properties in MPa - im7
+% E1  = 161000;    % [MPa]
+% E2  = 11380;     % [MPa]
+% G12 = 5200;      % [MPa]
+% nu12 = 0.32;
+% nu21 = nu12*E2/E1;
 
 % ----------------------- MEMBRANE LOADS -----------------------
 p = (Pi - Po);                    % [MPa]
-% sigma_phi   = p*R_mid/(2*t_tot);  % [MPa]
-% sigma_theta = sigma_phi;          % [MPa]
-% tau_phitheta = 0.0;
-% 
-% % Membrane resultants [MPa*mm = N/mm]
-% Nx  = sigma_phi   * t_tot;
-% Ny  = sigma_theta * t_tot;
-% Nxy = tau_phitheta * t_tot;
 
-% Nvec = [Nx; Ny; Nxy];
-% 
-% % No moments in pure membrane loading
-% Mvec = [0; 0; 0];
-
-% Resultants from spherical equilibrium (valid regardless of laminate)
+% Resultants from spherical equilibrium
 Nphi   = p*R_mid/2;          % MPa*mm = N/mm
 Ntheta = p*R_mid/2;          % MPa*mm
 Nxy    = 0;
@@ -95,8 +88,6 @@ end
 
 % ----------------------- REPORT -----------------------
 fprintf('--- CLT results (sphere membrane loading) ---\n');
-fprintf('sigma_phi = sigma_theta = %.3f MPa (thin-sphere membrane)\n', sigma_phi);
-fprintf('Nx = %.3f MPa*mm, Ny = %.3f MPa*mm\n', Nx, Ny);
 fprintf('Mid-plane strains eps0 = [%.6e  %.6e  %.6e]\n', eps0(1), eps0(2), eps0(3));
 fprintf('Curvatures kappa = [%.6e  %.6e  %.6e] 1/mm\n', kappa(1), kappa(2), kappa(3));
 
