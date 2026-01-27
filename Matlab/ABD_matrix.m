@@ -13,7 +13,7 @@ G13 = 3900;
 G23 = 5200;
 
 % Laminate definition
-theta_deg = [90,45,-45,90, 90, -45, 45, 90];
+theta_deg = [45,-45,45,0,0,-45,45,0];
 tply = 0.16;
 nply = numel(theta_deg);
 

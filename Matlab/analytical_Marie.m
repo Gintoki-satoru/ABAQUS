@@ -1,28 +1,28 @@
 % layup
-angles_deg = [0,60,-60,-60, 60, 0];
+angles_deg = [90,30,-30,90];
 Nply = numel(angles_deg);
 
 % Geometry
-R = 180;                 
+R = 241.09;                 
 t = 0.16*Nply;           % total thickness [mm]
 tply = t / Nply;         % <-- move here
 R_mid = R + t/2;
 
 % Pressures
-Pi = 0.1;         % internal pressure [MPa]
+Pi = 1;         % internal pressure [MPa]
 Po = 0.0;          % external pressure [MPa]
 
 % Material properties - car_epx - 20K
-% E2  = 173930;       
-% E1  = 15690;
-% E3  = 15690;
-% G12 = 11244;
-% G23 = 11244;
-% G13 = 5717.7;
-% nu21 = 0.433;
-% nu13 = 0.369;
-% nu23 = 0.433;
-% nu12 = nu21*E1/E2;
+E2  = 173930;       
+E1  = 15690;
+E3  = 15690;
+G12 = 11244;
+G23 = 11244;
+G13 = 5717.7;
+nu21 = 0.433;
+nu13 = 0.369;
+nu23 = 0.433;
+nu12 = nu21*E1/E2;
 
 % Material properties - car_epx - 293K
 % E2  = 171000;       
@@ -37,16 +37,16 @@ Po = 0.0;          % external pressure [MPa]
 % nu12 = nu21*E1/E2;
 
 % Im7
-E2  = 161000;       
-E1  = 11380;
-E3  = 11380;
-G12 = 5200;
-G23 = 5200;
-G13 = 3900;
-nu21 = 0.32;
-nu23 = 0.32;
-nu13 = 0.45;
-nu12 = nu21*E1/E2;
+% E2  = 161000;       
+% E1  = 11380;
+% E3  = 11380;
+% G12 = 5200;
+% G23 = 5200;
+% G13 = 3900;
+% nu21 = 0.32;
+% nu23 = 0.32;
+% nu13 = 0.45;
+% nu12 = nu21*E1/E2;
 
 % E1  = 10000;   % MPa
 % E2  = 147000;

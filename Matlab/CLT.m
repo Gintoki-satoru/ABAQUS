@@ -1,4 +1,4 @@
-angles_deg = [90,45,-45,90, 90, -45, 45, 90];
+angles_deg = [45,-45,-45,45];
 Nply = numel(angles_deg);
 R = 241.09;     % Radius [mm]
 t_tot     = 0.16*Nply;     % total thickness [mm]
@@ -116,51 +116,9 @@ xlabel('z (mm)'); ylabel('Stress (MPa)');
 title('Lamina (1-2) ply mid-surface stresses from CLT');
 legend('\sigma_1','\sigma_2','\tau_{12}','Location','best');
 
-%% ======================= FUNCTIONS =======================
-function Q = Qbar_UD_plane_stress(E1,E2,G12,nu12,nu21)
-% Plane-stress reduced stiffness Q in lamina coordinates (1-2)
-den = 1 - nu12*nu21;
-Q11 = E1/den;
-Q22 = E2/den;
-Q12 = nu12*E2/den;
-Q66 = G12;
-Q = [Q11 Q12 0;
-     Q12 Q22 0;
-     0   0   Q66];
-end
 
-function Qbar = Qbar_from_Q(Q, th)
-% Transformed reduced stiffness Qbar for angle th (radians)
-m = cos(th); n = sin(th);
-Q11=Q(1,1); Q22=Q(2,2); Q12=Q(1,2); Q66=Q(3,3);
 
-m2=m*m; n2=n*n; m3=m2*m; n3=n2*n; m4=m2*m2; n4=n2*n2;
-
-Qbar11 = Q11*m4 + 2*(Q12+2*Q66)*m2*n2 + Q22*n4;
-Qbar22 = Q11*n4 + 2*(Q12+2*Q66)*m2*n2 + Q22*m4;
-Qbar12 = (Q11+Q22-4*Q66)*m2*n2 + Q12*(m4+n4);
-Qbar16 = (Q11 - Q12 - 2*Q66)*m3*n - (Q22 - Q12 - 2*Q66)*m*n3;
-Qbar26 = (Q11 - Q12 - 2*Q66)*m*n3 - (Q22 - Q12 - 2*Q66)*m3*n;
-Qbar66 = (Q11 + Q22 - 2*Q12 - 2*Q66)*m2*n2 + Q66*(m4+n4);
-
-Qbar = [Qbar11 Qbar12 Qbar16;
-        Qbar12 Qbar22 Qbar26;
-        Qbar16 Qbar26 Qbar66];
-end
-
-function sig12 = stress_xy_to_12(sigxy, th)
-% Transform global stresses [sx; sy; txy] to lamina stresses [s1; s2; t12]
-m = cos(th); n = sin(th);
-sx = sigxy(1); sy = sigxy(2); txy = sigxy(3);
-
-s1  = m^2*sx + n^2*sy + 2*m*n*txy;
-s2  = n^2*sx + m^2*sy - 2*m*n*txy;
-t12 = -m*n*sx + m*n*sy + (m^2 - n^2)*txy;
-
-sig12 = [s1; s2; t12];
-end
-
-%%
+%
 % sigmaxy : 3 x Nplies  (global stresses at ply mids: [sx; sy; txy]) in MPa
 % z_mid   : 1 x Nplies  (ply mid-thickness locations, mm)
 % theta   : 1 x Nplies  (ply angles in degrees, material 1-axis w.r.t global x)
@@ -218,4 +176,48 @@ if ~isempty(failed)
     fprintf('Max Tsai-Wu = %.3f at ply %d (z_mid = %.3f mm)\n', max(TW_index), failed(TW_index(failed)==max(TW_index)), z_mid(TW_index==max(TW_index)));
 else
     fprintf('No ply failed (TW<1). Max Tsai-Wu = %.3f\n', max(TW_index));
+end
+
+%% ======================= FUNCTIONS =======================
+function Q = Qbar_UD_plane_stress(E1,E2,G12,nu12,nu21)
+% Plane-stress reduced stiffness Q in lamina coordinates (1-2)
+den = 1 - nu12*nu21;
+Q11 = E1/den;
+Q22 = E2/den;
+Q12 = nu12*E2/den;
+Q66 = G12;
+Q = [Q11 Q12 0;
+     Q12 Q22 0;
+     0   0   Q66];
+end
+
+function Qbar = Qbar_from_Q(Q, th)
+% Transformed reduced stiffness Qbar for angle th (radians)
+m = cos(th); n = sin(th);
+Q11=Q(1,1); Q22=Q(2,2); Q12=Q(1,2); Q66=Q(3,3);
+
+m2=m*m; n2=n*n; m3=m2*m; n3=n2*n; m4=m2*m2; n4=n2*n2;
+
+Qbar11 = Q11*m4 + 2*(Q12+2*Q66)*m2*n2 + Q22*n4;
+Qbar22 = Q11*n4 + 2*(Q12+2*Q66)*m2*n2 + Q22*m4;
+Qbar12 = (Q11+Q22-4*Q66)*m2*n2 + Q12*(m4+n4);
+Qbar16 = (Q11 - Q12 - 2*Q66)*m3*n - (Q22 - Q12 - 2*Q66)*m*n3;
+Qbar26 = (Q11 - Q12 - 2*Q66)*m*n3 - (Q22 - Q12 - 2*Q66)*m3*n;
+Qbar66 = (Q11 + Q22 - 2*Q12 - 2*Q66)*m2*n2 + Q66*(m4+n4);
+
+Qbar = [Qbar11 Qbar12 Qbar16;
+        Qbar12 Qbar22 Qbar26;
+        Qbar16 Qbar26 Qbar66];
+end
+
+function sig12 = stress_xy_to_12(sigxy, th)
+% Transform global stresses [sx; sy; txy] to lamina stresses [s1; s2; t12]
+m = cos(th); n = sin(th);
+sx = sigxy(1); sy = sigxy(2); txy = sigxy(3);
+
+s1  = m^2*sx + n^2*sy + 2*m*n*txy;
+s2  = n^2*sx + m^2*sy - 2*m*n*txy;
+t12 = -m*n*sx + m*n*sy + (m^2 - n^2)*txy;
+
+sig12 = [s1; s2; t12];
 end

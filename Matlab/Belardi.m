@@ -1,81 +1,77 @@
-R_in = 180;     % Radius [mm]
-t_tot     = 0.16*6;     % total thickness [mm]
-R = 180 + t/2;
-p_i = 0.1;
+tply   = 0.16;
+angles = [90,30,-30,90];
+Nply = numel(angles_deg);
+R_in = 241.09;     % Radius [mm]
+t_tot     = tply*Nply;     % total thickness [mm]
+R = R_in + t_tot/2;
+p_i = 1;
 K   = 1;     % head flattening factor used in Eq.(67)
 
-E1  = 161000;    % [MPa]
-E2  = 11380;     % [MPa]
-G12 = 5200;      % [MPa]
-nu12 = 0.32;
+% UD lamina properties in MPa - 20K car epx
+E1  = 173930;    % [MPa]
+E2  = 15690;     % [MPa]
+G12 = 11244;      % [MPa]
+nu12 = 0.433;
+nu21 = nu12*E2/E1;
 
-tply   = 0.16;
-angles = [0, 60, -60, -60, 60, 0];
+% E1  = 161000;    % [MPa]
+% E2  = 11380;     % [MPa]
+% G12 = 5200;      % [MPa]
+% nu12 = 0.32;
 
-% Axial coordinate where you want results (distance from junction / loaded edge)
-xmax = 100;       % [mm]
-Nx   = 101;
+% Axial coordinate to check results results
+xmax = 240;       % [mm]
+Nx   = 241;
 x    = linspace(0, xmax, Nx).';   % x=0 is the junction/edge where Q0x,M0x applied
 
-% -------------------- BUILD A and D (CLT) -------------------------------
 [A, D, z_int] = clt_AD(E1,E2,G12,nu12, angles, tply);
 
 A11=A(1,1); A12=A(1,2); A22=A(2,2);
 D11=D(1,1); D12=D(1,2); D22=D(2,2);
 
-% Stiffness parameter beta_c (Eq.30)
-beta_c = ((A22 - (A12^2)/A11) / (4*R^2*D11))^(1/4);   % [1/mm]
+% (Eq.30)
+beta_c = ((A22 - (A12^2)/A11) / (4*R^2*D11))^(1/4);
 
-% Particular (membrane) solution w_p (Eq.34)
+% (Eq.34)
 w_p = (p_i*R^2) / (A11*A22 - A12^2) * (A12^2 - A11);
 
 % -------------------- DISCONTINUITY LOADS Q0x, M0x ----------------------
-% For a CPV cylinder-head junction, paper derives (Eq.67): M0x=0 and Q0x formula.
-% NOTE: Eq.(67) depends on K and laminate stiffness terms.
+% (Eq.67)
 Q0x = -(p_i*K^2/8) * ( (4*R^2*A11*D11)/(A11*A22 - A12^2) )^(1/4);
 M0x = 0.0;
-
-% If you want a generic edge load case, just set Q0x,M0x directly and ignore Eq.(67).
 
 % -------------------- CLOSED-FORM FIELDS (Eqs.46-50) --------------------
 bcx = beta_c*x;
 expTerm = exp(-bcx);
 
-% w(x) Eq.(46)
+% Eq.(46)
 w = w_p + expTerm./(2*beta_c^3*D11) .* ...
     ( beta_c*M0x*(sin(bcx) - cos(bcx)) - Q0x*cos(bcx) );
 
-% Nx is constant from equilibrium (Eq.22)
-Nx_res = p_i*R/2;  % [MPa*mm]
+% (Eq.22)
+Nx_res = p_i*R/2;
 
-% Ntheta(x) Eq.(48)
+% Eq.(48)
 Ntheta = p_i*R + (A22 - A12^2/A11) .* expTerm./(2*beta_c^3*R*D11) .* ...
     ( beta_c*M0x*(cos(bcx) - sin(bcx)) + Q0x*cos(bcx) );
 
-% Mx, Mtheta Eq.(49)
+% Eq.(49)
 Mx = expTerm./beta_c .* ( beta_c*M0x*(cos(bcx)+sin(bcx)) + Q0x*sin(bcx) );
 Mtheta = (D12/D11) .* Mx;
 
-% Qx Eq.(50)
+% Eq.(50)
 Qx = expTerm .* ( Q0x*(cos(bcx) - sin(bcx)) - 2*beta_c*M0x*sin(bcx) );
 
 % -------------------- CONVERT (N,M) -> ply stresses (CLT) ---------------
-% Mid-surface strains and curvatures:
-% [Nx; Ntheta; Nxtheta] = A * [ex0; et0; g0]   (symmetric => no B coupling)
-% [Mx; Mtheta; Mxtheta] = D * [kx; kt; kxy]
-%
-% Here the BTCS solution is axisymmetric, so Nxy and Mxy are zero in the paper's cylinder formulation.
 Nxy = zeros(size(x));
 Mxy = zeros(size(x));
 
-eps0 = (A \ [Nx_res*ones(size(x)).'; Ntheta.'; Nxy.']).';   % Nx x 3
-kap  = (D \ [Mx.'; Mtheta.'; Mxy.']).';                    % Nx x 3
+eps0 = (A \ [Nx_res*ones(size(x)).'; Ntheta.'; Nxy.']).';
+kap  = (D \ [Mx.'; Mtheta.'; Mxy.']).';
 
-% Through-thickness sampling at ply midsurfaces
 nply = numel(angles);
-z_mid = 0.5*(z_int(1:end-1) + z_int(2:end));  % ply midsurfaces
+z_mid = 0.5*(z_int(1:end-1) + z_int(2:end));
 
-% Allocate ply mid-surface global stresses (sigma_x, sigma_theta, tau_xtheta)
 sigx_ply   = zeros(Nx, nply);
 sigt_ply   = zeros(Nx, nply);
 taux_ply   = zeros(Nx, nply);
@@ -85,11 +81,9 @@ for k = 1:nply
     Qbar = Qbar_plane_stress(E1,E2,G12,nu12, th);
 
     z = z_mid(k);
-    % global strains at this z: eps(z) = eps0 + z*kap
-    eps_z = eps0 + z*kap;      % Nx x 3
+    eps_z = eps0 + z*kap;      
 
-    % global stresses: sigma = Qbar * eps
-    sig = (Qbar * eps_z.').';  % Nx x 3
+    sig = (Qbar * eps_z.').';
     sigx_ply(:,k) = sig(:,1);
     sigt_ply(:,k) = sig(:,2);
     taux_ply(:,k) = sig(:,3);
@@ -108,7 +102,7 @@ figure; plot(x, Qx, 'LineWidth', 1.5); grid on;
 xlabel('x from junction [mm]'); ylabel('Q_x [MPa·mm]');
 title('Shear force Q_x(x) (BTCS)');
 
-% Ply mid-surface hoop stress along x (example: show outermost ply)
+% Ply mid-surface hoop stress along x
 figure; plot(x, sigt_ply(:,end), 'LineWidth', 1.5); grid on;
 xlabel('x from junction [mm]'); ylabel('\sigma_\theta [MPa]');
 title('Hoop stress at ply mid-surface (outermost ply)');
