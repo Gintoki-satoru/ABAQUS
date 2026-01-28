@@ -1,5 +1,5 @@
 % layup
-angles_deg = [90,30,-30,90];
+angles_deg = [15,-15,15,-15];
 Nply = numel(angles_deg);
 
 % Geometry

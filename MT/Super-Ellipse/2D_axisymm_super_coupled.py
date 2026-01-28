@@ -67,15 +67,15 @@ myModel = mdb.models[modelName]
 
 #############################   PARAMETERS    #############################
 
-r_inner = 241.09     # semi-axis in a
-z_inner = 241.09     # semi-axis in c
+r_inner = 114.24     # semi-axis in a
+z_inner = 799.71     # semi-axis in c
 
-n = 1         # superellipse exponent
+n = 0.7         # superellipse exponent
 
 n_spline = 150  # number of spline points
 N_theta = 10   # number of meridional regions
 
-plyAngle = [0,-30,60,30]  # stacking sequence (degrees)
+plyAngle = [90,45,-45,90]  # stacking sequence (degrees)
 thick   = 0.16*plyAngle.__len__()  # total thickness
 N_part = plyAngle.__len__()  # number of partitions through thickness
 
@@ -125,7 +125,7 @@ s.sketchOptions.setValues(viewStyle=AXISYM)
 s.setPrimaryObject(option=STANDALONE)
 
 # Axis of symmetry
-s.ConstructionLine(point1=(0.0, -200.0), point2=(0.0, 200.0))
+s.ConstructionLine(point1=(0, -200.0), point2=(0, 200.0))
 
 def superellipse_rz(theta, a, c, n):
     r = a * (math.cos(theta) ** (n))
@@ -193,7 +193,7 @@ for i in range(1, N_part):
     s1.sketchOptions.setValues(viewStyle=AXISYM)
     s1.setPrimaryObject(option=SUPERIMPOSE)
     # axis of symmetry
-    s1.ConstructionLine(point1=(0.0, -300.0), point2=(0.0, 300.0))
+    s1.ConstructionLine(point1=(0, -300.0), point2=(0, 300.0))
     # --- generate open spline ---
     part_pts = [
         superellipse_rz(th, a_i, c_i, n)
@@ -732,8 +732,10 @@ def layer_index_from_delta(delta, thick, N_part):
 def layer_mid_delta(k, thick, N_part):
     return (k + 0.5) * thick / float(N_part)
 
-r_cutoff = 4.0
+r_cutoff = 7.0
 z_cutoff = 4.0
+theta_min = 0
+theta_min = math.radians(theta_min)
 exclude_elems = set()
 elem_to_phi = {}
 elem_to_k   = {}
@@ -748,6 +750,9 @@ for elem in p.elements:
     z = [c[1] for c in coords]
     r_c = sum(r) / len(r)
     z_c = sum(z) / len(z)
+    theta = atan2(r_c, z_c)   # meridional angle
+    if theta < theta_min:
+        exclude_elems.add(elemLabel)
     if r_c < r_cutoff:
         exclude_elems.add(elemLabel)
     if z_c < z_cutoff:
@@ -804,17 +809,93 @@ p.SetFromElementLabels(
     elementLabels=list(exclude_elems)
 )
 
-for k in sorted(layer_to_elems.keys()):
-    set_name = 'PLY_%02d' % k
-    p.SetFromElementLabels(
-        name=set_name,
-        elementLabels=layer_to_elems[k]
-    )
+# for k in sorted(layer_to_elems.keys()):
+#     set_name = 'PLY_%02d' % k
+#     p.SetFromElementLabels(
+#         name=set_name,
+#         elementLabels=layer_to_elems[k]
+#     )
 
 session.viewports['Viewport: 1'].partDisplay.geometryOptions.setValues(
     datumCoordSystems=OFF)
 session.viewports['Viewport: 1'].assemblyDisplay.geometryOptions.setValues(
 datumCoordSystems=OFF)
+
+
+def build_node_label_map(part):
+    return {nd.label: nd for nd in part.nodes}
+
+def create_interface_node_set_by_delta_band(part, ply_k, N_part,
+                                            r_inner, z_inner, thick, n,
+                                            tol_delta=None, expand_factor=0.35):
+    """
+    Creates interface node set for boundary between ply k and k+1 by selecting
+    ALL nodes whose delta is within a tolerance band around delta_int.
+    Much more robust than per-element node picking.
+    expand_factor: fraction of ply thickness used as default tolerance if tol_delta=None
+    """
+    if ply_k >= N_part - 1:
+        print("PLY_%02d is last ply -> no interface set created." % ply_k)
+        return None
+    ply_set_name  = "PLY_%02d" % ply_k
+    node_set_name = "PLY_%02d_IFACE" % ply_k
+    if ply_set_name not in part.sets:
+        raise RuntimeError("Set '%s' not found in part.sets" % ply_set_name)
+    elems = part.sets[ply_set_name].elements
+    if len(elems) == 0:
+        print("Set '%s' is empty." % ply_set_name)
+        return None
+    # Interface delta
+    delta_int = (ply_k + 1.0) * thick / float(N_part)
+    # Tolerance
+    tply = thick / float(N_part)
+    if tol_delta is None:
+        tol_delta = expand_factor * tply
+    label_to_node = build_node_label_map(part)
+    # Collect all nodes connected to elements in this ply
+    candidate_nodes = set()
+    for e in elems:
+        for nlab in e.connectivity:
+            candidate_nodes.add(nlab)
+    # Compute deltas (cache)
+    delta_cache = {}
+    iface_nodes = set()
+    n_none = 0
+    for nlab in candidate_nodes:
+        nd = label_to_node[nlab]
+        r = nd.coordinates[0]
+        z = nd.coordinates[1]
+        d = delta_cache.get(nlab, None)
+        if d is None:
+            d = solve_delta_for_point(r, z, r_inner, z_inner, thick, n)
+            delta_cache[nlab] = d
+        if d is None:
+            n_none += 1
+            continue
+        if abs(d - delta_int) <= tol_delta:
+            iface_nodes.add(nlab)
+    if not iface_nodes:
+        raise RuntimeError(
+            "No interface nodes found for %s. Increase tol_delta or check delta solver."
+            % ply_set_name
+        )
+    part.SetFromNodeLabels(
+        name=node_set_name,
+        nodeLabels=tuple(sorted(iface_nodes))
+    )
+    return node_set_name
+
+
+# for k in range(N_part - 1):
+#     create_interface_node_set_by_delta_band(
+#         part=p,
+#         ply_k=k,
+#         N_part=N_part,
+#         r_inner=r_inner, z_inner=z_inner,
+#         thick=thick, n=n,
+#         tol_delta=0.5*mesh_size,
+#         expand_factor=0.4
+#     )
 
 ################# JOB Creation ###################
 job = mdb.Job(name='Job-1', model='EllipseModel_2D', description='', type=ANALYSIS, 
@@ -973,11 +1054,23 @@ def failure_analysis(elem_to_phi, strain_limit=0.005):
         raise RuntimeError("Strain output 'E' not found in ODB frame. Request strains (E).")
     Sfield = frame.fieldOutputs['S'].getSubset(position=INTEGRATION_POINT)
     Efield = frame.fieldOutputs['E'].getSubset(position=INTEGRATION_POINT)
-    # --- Build strain lookup by (instance, element, ip, sectionPoint) ---
+    # Exclude elements based on S12
+    # S12_LIMIT = 0.02
+    # exclude_elems_s12 = set()
+    for sv in Sfield.values:
+        ip = getattr(sv, 'integrationPoint', None)
+        if ip is None:
+            continue
+        sd = sv.data
+        s12 = float(sd[3]) if len(sd) > 3 else 0.0
+        # if abs(s12) > S12_LIMIT:
+        #     exclude_elems_s12.add(sv.elementLabel)
     E_by_key = {}
     for ev in Efield.values:
         if ev.elementLabel in exclude_elems:
             continue
+        # if ev.elementLabel in exclude_elems_s12:
+        #     continue
         inst_name = ev.instance.name if ev.instance else ''
         ip = getattr(ev, 'integrationPoint', None)
         sp = getattr(ev, 'sectionPoint', None)
@@ -1023,6 +1116,8 @@ def failure_analysis(elem_to_phi, strain_limit=0.005):
             el = sv.elementLabel
             if el in exclude_elems:
                 continue
+            # if el in exclude_elems_s12:
+            #     continue
             if el not in elem_to_phi:
                 continue
             inst_name = sv.instance.name if sv.instance else ''

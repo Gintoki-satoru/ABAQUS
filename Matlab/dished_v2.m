@@ -16,7 +16,7 @@ fprintf('Fitted superellipse exponent n1 = %.4f\n', n1_fit);
 
 % 2) Compute stresses for both geometries
 out_paper = head_paper_stress(a, b, h, p0, k, N);
-out_super = head_superellipse_stress(a, b, h, p0, 2/0.6, N);
+out_super = head_superellipse_stress(a, b, h, p0, 2/0.7, N);
 
 r = out_paper.r;   % same sampling r for both
 
