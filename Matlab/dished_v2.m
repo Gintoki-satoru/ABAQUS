@@ -3,11 +3,11 @@
 clear; clc; close all;
 
 % Geometry & loading (consistent with the paper: mm & MPa)
-a   = 158.71;      % [mm] cylinder/head radius
-b   = 476.14; % [mm] head depth
-h   = 2.009;        % [mm] thickness
+a   = 114.24;      % [mm] cylinder/head radius
+b   = 799.71; % [mm] head depth
+h   = 2;        % [mm] thickness
 p0  = 1;        % [MPa] internal pressure
-k   = 0.6/2;      
+k   = 0.7/2;      
 N   = 400;      % points along meridian
 
 % 1) Fit n1 so that superellipse meridian best matches paper meridian
