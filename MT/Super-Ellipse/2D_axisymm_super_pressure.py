@@ -70,7 +70,7 @@ n = 1         # superellipse exponent
 n_spline = 150  # number of spline points
 N_theta = 10   # number of meridional regions
 
-plyAngle = [0, 60, -60, -60, 60, 0]  # stacking sequence (degrees)
+plyAngle = [0, 45, -45, 90]  # stacking sequence (degrees)
 thick   = 0.16*plyAngle.__len__()  # total thickness
 N_part = plyAngle.__len__()  # number of partitions through thickness
 
@@ -830,13 +830,13 @@ for elem in p.elements:
         name=set_name,
         elementLabels=(elemLabel,)
     )
-    # --- assign material orientation ---
+    angle_deg = 45.0 if elemLabel in exclude_elems else 90.0
     p.MaterialOrientation(
         region=elemSet,
         orientationType=SYSTEM,
         localCsys=p.datums[dcsys.id],
         axis=AXIS_3,
-        angle=90.0,
+        angle=angle_deg,
         additionalRotationType=ROTATION_ANGLE,
         stackDirection=STACK_3
     )

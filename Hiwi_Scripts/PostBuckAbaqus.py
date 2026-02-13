@@ -231,7 +231,7 @@ def runSimulation(a,b,A11,A12,A22,A66,D11,D12,D16,D22,D26,D66,meshSize,lambdaEnd
     ## replace eigensolver with nonlin riks solver
     mbdAssembly = mdb.models['Model-2'].rootAssembly
     mdb.models['Model-2'].StaticRiksStep(name='Step-1', previous='Initial', 
-        maintainAttributes=True, maxNumInc=100, initialArcInc=0.001, 
+        maintainAttributes=True, maxNumInc=50, initialArcInc=0.001, 
         minArcInc=1E-36, maxArcInc=1, totalArcLength=1, maxLPF=lambdaEnd, nlgeom=ON) #for modechange: totalArcLength=0.7, else: totalArcLength=1
     
     ## output request
@@ -302,17 +302,17 @@ def runSimulation(a,b,A11,A12,A22,A66,D11,D12,D16,D22,D26,D66,meshSize,lambdaEnd
 
 a0 = 200
 b0 = 200
-A110 = 1.1328e+05
-A220 = 1.1328e+05
-A120 = 8.4595e+04
-A660 = 9.3204e+04
+A110 = 1.9214e+05
+A220 = 1.9214e+05
+A120 = 5.7312e+03
+A660 = 14340
 A160 = 0.0
 A260 = 0.0
 
-D110 = 7.0797e+05
-D220 = 7.0797e+05
-D120 = 5.2872e+05
-D660 = 5.8252e+05
+D110 = 1.2009e+06
+D220 = 1.2009e+06
+D120 = 3.5820e+04
+D660 = 89625
 D160 = 0.0
 D260 = 0.0
 

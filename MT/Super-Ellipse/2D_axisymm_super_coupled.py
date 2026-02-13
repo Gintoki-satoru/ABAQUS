@@ -793,13 +793,13 @@ for elem in p.elements:
         name=set_name,
         elementLabels=(elemLabel,)
     )
-    # --- assign material orientation ---
+    angle_deg = 90.0 if elemLabel in exclude_elems else 90.0
     p.MaterialOrientation(
         region=elemSet,
         orientationType=SYSTEM,
         localCsys=p.datums[dcsys.id],
         axis=AXIS_3,
-        angle=90.0,
+        angle=angle_deg,
         additionalRotationType=ROTATION_ANGLE,
         stackDirection=STACK_3
     )
