@@ -37,8 +37,8 @@ import math
 import csv
 
 
-path_modules = 'U:\\Sachdeva\\MT_Nair\\ABAQUS\\MT\\Super-Ellipse'
-# path_modules = r"C:\Users\lenovo\Desktop\Aerospace\Thesis\ABAQUS\MT\Macros"
+# path_modules = 'U:\\Sachdeva\\MT_Nair\\ABAQUS\\MT\\Super-Ellipse'
+path_modules = r"C:\Users\lenovo\Desktop\Aerospace\Thesis\ABAQUS\MT\Super-Ellipse"
 if path_modules not in sys.path:
     sys.path.append(path_modules)
 
@@ -67,10 +67,10 @@ myModel = mdb.models[modelName]
 
 #############################   PARAMETERS    #############################
 
-r_inner = 114.24     # semi-axis in a
-z_inner = 799.71     # semi-axis in c
+r_inner = 75     # semi-axis in a
+z_inner = 75     # semi-axis in c
 
-n = 0.7         # superellipse exponent
+n = 1.0         # superellipse exponent
 
 n_spline = 150  # number of spline points
 N_theta = 10   # number of meridional regions
@@ -809,12 +809,12 @@ p.SetFromElementLabels(
     elementLabels=list(exclude_elems)
 )
 
-# for k in sorted(layer_to_elems.keys()):
-#     set_name = 'PLY_%02d' % k
-#     p.SetFromElementLabels(
-#         name=set_name,
-#         elementLabels=layer_to_elems[k]
-#     )
+for k in sorted(layer_to_elems.keys()):
+    set_name = 'PLY_%02d' % k
+    p.SetFromElementLabels(
+        name=set_name,
+        elementLabels=layer_to_elems[k]
+    )
 
 session.viewports['Viewport: 1'].partDisplay.geometryOptions.setValues(
     datumCoordSystems=OFF)
@@ -886,16 +886,16 @@ def create_interface_node_set_by_delta_band(part, ply_k, N_part,
     return node_set_name
 
 
-# for k in range(N_part - 1):
-#     create_interface_node_set_by_delta_band(
-#         part=p,
-#         ply_k=k,
-#         N_part=N_part,
-#         r_inner=r_inner, z_inner=z_inner,
-#         thick=thick, n=n,
-#         tol_delta=0.5*mesh_size,
-#         expand_factor=0.4
-#     )
+for k in range(N_part - 1):
+    create_interface_node_set_by_delta_band(
+        part=p,
+        ply_k=k,
+        N_part=N_part,
+        r_inner=r_inner, z_inner=z_inner,
+        thick=thick, n=n,
+        tol_delta=0.1*mesh_size,
+        expand_factor=0.1
+    )
 
 ################# JOB Creation ###################
 job = mdb.Job(name='Job-1', model='EllipseModel_2D', description='', type=ANALYSIS, 
@@ -1518,3 +1518,142 @@ def puck_failure_integration_points():
     print("  Integration point :", max_ip)
 
 puck_failure_integration_points()
+
+
+# Abaqus Python 2.7 script
+# Extract COORD + Stress (S) for a node set and write CSV
+#
+# Usage (inside Abaqus/CAE or abaqus python):
+#   - Set odb_path, instance_name, nodeset_name, step_name, frame_index, out_csv
+#
+# Notes:
+# - Stress is typically stored at INTEGRATION_POINT. We request NODAL subset which
+#   averages to nodes when available.
+# - COORD comes from the ODB instance node coordinates.
+
+from odbAccess import openOdb
+from abaqusConstants import NODAL
+import csv
+
+# ------------------ USER INPUTS ------------------
+odb_path      = r"job-1.odb"
+step_name     = "LoadingStep"
+frame_index   = -1                 # -1 = last frame
+instance_name = "SUPERELLIPSOID_2D-1"         # ODB instance name (Assembly instance)
+nodeset_name  = "PLY_01_IFACE"           # Node set name (usually on the INSTANCE)
+out_csv       = r"nodeset_stress_coord.csv"
+
+# Stress components to export:
+# For 3D: 'S11','S22','S33','S12','S13','S23'
+# For Axisym: typically 'S11','S22','S33','S12' (depends on output)
+stress_labels = ["S11","S22","S33","S12","S13","S23"]
+# --------------------------------------------------
+
+def safe_get_component(label_list, tensor_data, label):
+    """Return tensor component by label if present; else blank."""
+    # Abaqus returns stress as a 6-tuple for 3D (S11,S22,S33,S12,S13,S23)
+    # In some cases it may be 4-tuple (axisym/planar): (S11,S22,S33,S12) or similar
+    idx_map = {
+        "S11": 0, "S22": 1, "S33": 2,
+        "S12": 3, "S13": 4, "S23": 5
+    }
+    i = idx_map.get(label, None)
+    if i is None:
+        return ""
+    if i < len(tensor_data):
+        return tensor_data[i]
+    return ""
+
+def main():
+    odb = openOdb(path=odb_path, readOnly=True)
+    # Get step/frame
+    step = odb.steps[step_name]
+    frame = step.frames[frame_index]
+    # Instance + nodeset
+    inst = odb.rootAssembly.instances[instance_name]
+    # Node set can exist under rootAssembly.nodeSets (global) or instance.nodeSets (local)
+    if nodeset_name in inst.nodeSets:
+        nset = inst.nodeSets[nodeset_name]
+    elif nodeset_name in odb.rootAssembly.nodeSets:
+        nset = odb.rootAssembly.nodeSets[nodeset_name]
+    else:
+        odb.close()
+        raise ValueError("Node set not found: %s (checked instance and rootAssembly)" % nodeset_name)
+    # COORD: from ODB nodes
+    # Build node label -> (x,y,z)
+    coord_map = {}
+    for n in nset.nodes:
+        # n.coordinates is a tuple (x,y,z) or (x,y) depending on model
+        coord_map[n.label] = n.coordinates
+    # Stress field
+    if "S" not in frame.fieldOutputs:
+        odb.close()
+        raise ValueError("Field output 'S' not found in frame. Ensure stress output is requested.")
+    S = frame.fieldOutputs["S"]
+    # Try to get nodal stress directly/averaged-to-nodes
+    try:
+        S_nodal = S.getSubset(region=nset, position=ELEMENT_NODAL)
+        s_vals = S_nodal.values
+    except:
+        # Fallback: just subset by region (may still be IP values)
+        # If this happens, user likely needs to request NODAL output or accept IP export.
+        S_sub = S.getSubset(region=nset)
+        s_vals = S_sub.values
+    # Build node label -> averaged stress tuple
+    # If multiple contributions per node exist (from different elems), average them
+    sum_map = {}
+    cnt_map = {}
+    for v in s_vals:
+        # v.nodeLabel exists for nodal-position values (and for some averaged outputs)
+        # If not present, this is likely integration-point-only data without node association.
+        if not hasattr(v, "nodeLabel"):
+            continue
+        nl = v.nodeLabel
+        data = v.data  # tuple
+        if nl not in sum_map:
+            sum_map[nl] = [0.0]*len(data)
+            cnt_map[nl] = 0
+        for i in range(len(data)):
+            sum_map[nl][i] += data[i]
+        cnt_map[nl] += 1
+    avg_map = {}
+    for nl in sum_map:
+        c = float(cnt_map[nl])
+        avg_map[nl] = tuple([x/c for x in sum_map[nl]])
+    # Write CSV
+    f = open(out_csv, "wb")  # Python 2.7 csv
+    w = csv.writer(f)
+    # Header
+    # COORD size may be 2 or 3; write generic X,Y,(Z)
+    # Determine max coordinate dimension present
+    max_dim = 0
+    for k in coord_map:
+        if len(coord_map[k]) > max_dim:
+            max_dim = len(coord_map[k])
+    coord_cols = ["X","Y"] + (["Z"] if max_dim >= 3 else [])
+    header = ["nodeLabel"] + coord_cols + stress_labels
+    w.writerow(header)
+    # Rows: iterate nodes in set order
+    for n in nset.nodes:
+        nl = n.label
+        xyz = coord_map.get(nl, ())
+        x = xyz[0] if len(xyz) > 0 else ""
+        y = xyz[1] if len(xyz) > 1 else ""
+        z = xyz[2] if len(xyz) > 2 else ""
+        s = avg_map.get(nl, None)
+        row = [nl, x, y]
+        if max_dim >= 3:
+            row.append(z)
+        if s is None:
+            # no stress found for this node (can happen at boundaries, missing output, etc.)
+            row += [""] * len(stress_labels)
+        else:
+            for lab in stress_labels:
+                row.append(safe_get_component(stress_labels, s, lab))
+        w.writerow(row)
+    f.close()
+    odb.close()
+    print("Wrote:", out_csv)
+
+if __name__ == "__main__":
+    main()

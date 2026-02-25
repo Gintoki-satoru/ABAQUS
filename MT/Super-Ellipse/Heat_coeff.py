@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 import numpy as np
 from math import gamma
 
@@ -26,8 +27,10 @@ def superellipsoid_area(a, b, c, n1, n2, N=5250):
     dY_dphi, dY_dtheta = np.gradient(Y, phi, theta)
     dZ_dphi, dZ_dtheta = np.gradient(Z, phi, theta)
 
-    r_phi   = np.stack([dX_dphi,   dY_dphi,   dZ_dphi], axis=2)
-    r_theta = np.stack([dX_dtheta, dY_dtheta, dZ_dtheta], axis=2)
+    # r_phi   = np.stack([dX_dphi,   dY_dphi,   dZ_dphi], axis=2)
+    # r_theta = np.stack([dX_dtheta, dY_dtheta, dZ_dtheta], axis=2)
+    r_phi   = np.dstack((dX_dphi,   dY_dphi,   dZ_dphi))
+    r_theta = np.dstack((dX_dtheta, dY_dtheta, dZ_dtheta))
 
     cross_prod = np.cross(r_phi, r_theta)
     dA = np.sqrt(np.sum(cross_prod**2, axis=2))

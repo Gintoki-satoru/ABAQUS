@@ -23,7 +23,7 @@ model.rootAssembly.clearGeometryCache()
 model.rootAssembly.regenerate()
 
 ################ Parameters #####################
-a, b, c = 150.00, 150.00, 100.00   # inner semi-axes
+a, b, c = 200, 200, 200   # inner semi-axes
 total_length = c
 thick = 2.5                     # total thickness
 n1, n2 = 1.0, 1.0               # shape exponents
@@ -31,8 +31,8 @@ num_points = 30                 # points per curve
 num_layers = 1                  # number of layers through thickness
 num_theta_sections = 15          # number of θ sections(min 2): For even number, the number of partitions created will be (num_theta_sections + 1)
 num_partitions = 4              # number of partitions for face BC
-pressure_value = 0.1            # pressure magnitude (MPa) Pa -> 10^6
-mesh_size = 1.5                 # mesh size
+pressure_value = 1            # pressure magnitude (MPa) Pa -> 10^6
+mesh_size = 2                 # mesh size
 
 a_out, b_out, c_out = a + thick, b + thick, c + thick  # outer semi-axes
 
@@ -790,3 +790,196 @@ pt = superellipsoid_point_3d(0.0, 0.0, a + thick/2, b + thick/2, c + thick/2, n1
 pickedEdges = e1.findAt((pt, ))
 p1.seedEdgeByNumber(edges=pickedEdges, number=4, constraint=FINER)    
 p1.generateMesh()
+
+
+
+# Abaqus Python 2.7
+# Extract ELEMENT_NODAL stress (all components) + COORD for a node set
+# Output: CSV with one row per element-node value
+
+from odbAccess import openOdb
+from abaqusConstants import ELEMENT_NODAL
+import csv
+
+
+
+
+model_name    = 'SuperEllipse'
+instance_name = 'SuperEllipsoid-1'     # Assembly instance name in CAE (not part name)
+set_name      = 'THETA_45_SET'
+a_mid, b_mid, c_mid = 200 + thick/2, 200 + thick/2, 200 + thick/2
+n1, n2  = 1.0, 1.0
+
+theta_target_deg = 45.0
+theta_tol_deg    = 0.155
+F_tol = 0.001
+# -------------------------------------------
+
+def sgn(x):
+    return 1.0 if x >= 0.0 else -1.0
+
+def wrap_pi(x):
+    return (x + math.pi) % (2.0*math.pi) - math.pi
+
+def theta_from_xy_superellipsoid(x, y, a, b, n2):
+    """
+    Theta consistent with your param mapping (azimuth in XY):
+      u = sign(x)*(|x|/a)^(1/n2)
+      v = sign(y)*(|y|/b)^(1/n2)
+      theta = atan2(v, u)
+    """
+    if abs(x) < 1e-20 and abs(y) < 1e-20:
+        return None
+    u = sgn(x) * (abs(x)/a)**(1.0/n2)
+    v = sgn(y) * (abs(y)/b)**(1.0/n2)
+    return math.atan2(v, u)
+
+def F_superellipsoid(x, y, z, a, b, c, n1, n2):
+    """
+    Implicit super-ellipsoid level-set consistent with common superquadric form:
+      F = ( (|x/a|^(2/n2) + |y/b|^(2/n2))^(n2/n1) + |z/c|^(2/n1) )
+    Mid-surface corresponds to F ~ 1 when using (a_mid,b_mid,c_mid,n1,n2).
+    """
+    # guard
+    if a <= 0 or b <= 0 or c <= 0 or n1 <= 0 or n2 <= 0:
+        raise ValueError("a,b,c,n1,n2 must be > 0")
+    term_xy = (abs(x)/a)**(2.0/n2) + (abs(y)/b)**(2.0/n2)
+    return (term_xy**(n2/n1)) + (abs(z)/c)**(2.0/n1)
+
+def main():
+    mdl  = mdb.models[model_name]
+    aasm = mdl.rootAssembly
+    inst = aasm.instances[instance_name]
+    if len(inst.nodes) == 0:
+        raise ValueError("Instance has no mesh nodes. Mesh first.")
+    theta0 = math.radians(theta_target_deg)
+    tol_th = math.radians(theta_tol_deg)
+    labels = []
+    scanned = 0
+    for nd in inst.nodes:
+        scanned += 1
+        x, y, z = nd.coordinates
+        # 1) theta ~ 45
+        th = theta_from_xy_superellipsoid(x, y, a_mid, b_mid, n2)
+        if th is None:
+            continue
+        if abs(wrap_pi(th - theta0)) > tol_th:
+            continue
+        # 2) mid-surface: F_mid ~ 1
+        Fm = F_superellipsoid(x, y, z, a_mid, b_mid, c_mid, n1, n2)
+        if abs(Fm - 1.0) > F_tol:
+            continue
+        labels.append(nd.label)
+    if not labels:
+        raise ValueError(
+            "No nodes found after filtering.\n"
+            "Try increasing F_tol (e.g. 0.05) and/or theta_tol_deg, "
+            "or ensure you actually have nodes near the mid-surface."
+        )
+    # Build MeshNodeArray from labels
+    node_array = inst.nodes.sequenceFromLabels(labels=tuple(labels))
+    # Delete existing assembly set if present
+    if set_name in aasm.sets:
+        del aasm.sets[set_name]
+    # Create assembly-level set
+    aasm.Set(name=set_name, nodes=node_array)
+    print("Scanned nodes:", scanned)
+    print("Created set '%s' with %d nodes." % (set_name, len(labels)))
+    print("Filters: theta=%g±%g deg, |F_mid-1|<=%g" %
+          (theta_target_deg, theta_tol_deg, F_tol))
+
+if __name__ == "__main__":
+    main()
+
+
+# ------------------ USER INPUTS ------------------
+odb_path      = r"job-1.odb"
+step_name     = "LoadingStep"
+frame_index   = -1                 # -1 = last frame
+instance_name = "SUPERELLIPSOID-1"         # ODB instance name
+nodeset_name  = "THETA_45_SET"           # node set on instance or rootAssembly
+out_csv       = r"elemNodal_stress_coords.csv"
+# -------------------------------------------------
+
+def get_nodeset(odb, inst, set_name):
+    """Find node set either on instance or on rootAssembly."""
+    if set_name in inst.nodeSets:
+        return inst.nodeSets[set_name]
+    if set_name in odb.rootAssembly.nodeSets:
+        return odb.rootAssembly.nodeSets[set_name]
+    raise ValueError("Node set '%s' not found (checked instance and rootAssembly)." % set_name)
+
+def write_csv(out_path, rows):
+    f = open(out_path, "wb")  # py2.7
+    w = csv.writer(f)
+    w.writerow(["nodeLabel","X","Y","Z","S11","S22","S33","S12","S13","S23"])
+    for r in rows:
+        w.writerow(r)
+    f.close()
+
+def main():
+    odb = openOdb(odb_path, readOnly=True)
+    step = odb.steps[step_name]
+    frame = step.frames[frame_index]
+    inst = odb.rootAssembly.instances[instance_name]
+    nset = get_nodeset(odb, inst, nodeset_name)
+    # nodeLabel -> coords (robust for assembly-level sets)
+    coord = {}
+    rows = []
+    try:
+        for n in nset.nodes:
+            if hasattr(n, 'coordinates'):
+                coord[n.label] = n.coordinates
+            else:
+                for nn in n:
+                    coord[nn.label] = nn.coordinates
+    except TypeError:
+        for node_array in nset.nodes:
+            for n in node_array:
+                coord[n.label] = n.coordinates
+    if "S" not in frame.fieldOutputs:
+        odb.close()
+        raise ValueError("Field output 'S' not found in the frame. Ensure stress output was requested.")
+    S = frame.fieldOutputs["S"]
+    got_nodal = False
+    # ------------------------------------------------------------
+    # 2) Fallback: ELEMENT_NODAL averaged to NODAL
+    # ------------------------------------------------------------
+    if not got_nodal:
+        S_en = S.getSubset(position=ELEMENT_NODAL)
+        sum_map = {}
+        cnt_map = {}
+        for v in S_en.values:
+            if not hasattr(v, "nodeLabel"):
+                continue
+            nl = v.nodeLabel
+            if nl not in coord:
+                continue
+            data = v.data
+            if nl not in sum_map:
+                sum_map[nl] = [0.0]*len(data)
+                cnt_map[nl] = 0
+            for i in range(len(data)):
+                sum_map[nl][i] += data[i]
+            cnt_map[nl] += 1
+        avg = {}
+        for nl in sum_map:
+            c = float(cnt_map[nl])
+            avg[nl] = tuple([x/c for x in sum_map[nl]])
+        for nl in sorted(coord.keys()):
+            xyz = coord[nl]
+            x = xyz[0] if len(xyz) > 0 else ""
+            y = xyz[1] if len(xyz) > 1 else ""
+            z = xyz[2] if len(xyz) > 2 else ""
+            s = avg.get(nl, None)
+            def comp(i):
+                return s[i] if (s is not None and i < len(s)) else ""
+            rows.append([nl, x, y, z, comp(0), comp(1), comp(2), comp(3), comp(4), comp(5)])
+    write_csv(out_csv, rows)
+    print("Wrote:", out_csv)
+    print("Nodes exported:", len(rows))
+    print("Stress source:", "NODAL" if got_nodal else "ELEMENT_NODAL averaged to nodal")
+    odb.close()
+
+if __name__ == "__main__":
+    main()

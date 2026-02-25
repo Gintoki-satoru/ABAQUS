@@ -304,6 +304,6 @@ end
 axis equal;
 xlabel('a');
 ylabel('b');
-title('Super ellipses for a = b = 1 and different n');
+title('Super Ellipses  for a = b = 1 and different n');
 legend('Location','bestoutside');
 grid on;

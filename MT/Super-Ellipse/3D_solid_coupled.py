@@ -13,8 +13,8 @@ import mesh
 import math
 import csv
 
-path_modules = 'U:\\Sachdeva\\MT_Nair\\ABAQUS\\MT\\Super-Ellipse'
-# path_modules = r"C:\Users\lenovo\Desktop\Aerospace\Thesis\ABAQUS\MT\Macros"
+# path_modules = 'U:\\Sachdeva\\MT_Nair\\ABAQUS\\MT\\Super-Ellipse'
+path_modules = r"C:\Users\lenovo\Desktop\Aerospace\Thesis\ABAQUS\MT\Super-Ellipse"
 if path_modules not in sys.path:
     sys.path.append(path_modules)
 
@@ -37,10 +37,10 @@ model.rootAssembly.clearGeometryCache()
 model.rootAssembly.regenerate()
 
 ################ Parameters #####################
-a, b, c = 140.84, 114.24, 799.71   # inner semi-axes
+a, b, c = 75, 75, 75   # inner semi-axes
 total_length = c
 thick = 1.576                    # total thickness
-n1, n2 = 0.7, 1.0               # shape exponents
+n1, n2 = 1.0, 1.0               # shape exponents
 num_points = 30                 # points per curve
 num_layers = 1                  # number of layers through thickness
 num_theta_sections = 15          # number of θ sections(min 2): For even number, the number of partitions created will be (num_theta_sections + 1)
