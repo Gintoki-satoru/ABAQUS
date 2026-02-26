@@ -106,11 +106,11 @@ end
 
 % ---- Your volume function ----
 function V = superellipsoid_volume(a, b, c, n1, n2)
-    e1 = 2/n1;
-    e2 = 2/n2;
-    V = 8 * a * b * c * ...
-        (gamma(1 + 1/e1)^2 * gamma(1 + 1/e2)) / ...
-        (gamma(1 + 2/e1) * gamma(1 + (1/e2 + 2/e1)));
+    pxy = 2/n2;
+    pz  = 2/n1;
+
+    V = 8*a*b*c * gamma(1 + 1/pxy)^2 * gamma(1 + 1/pz) / ...
+                gamma(1 + 2/pxy + 1/pz);
 end
 
 
@@ -221,13 +221,13 @@ function generate_superellipsoid_parametric_new()
     % Two geometric ratios only
     % ------------------------------
     ABC_list = [
-        1 1 5
+        1 1 45
     ];
 
     % ------------------------------
     % n1, n2 range (1 : -0.05 : 0.6)
     % ------------------------------
-    n_vals = 0.65:-0.05:0.6;   % produces [1, 0.95, ..., 0.6]
+    n_vals = 0.65:-0.05:0.4;   % produces [1, 0.95, ..., 0.6]
 
     % ------------------------------
     % Storage

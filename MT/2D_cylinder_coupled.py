@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 import __main__
 import os
 import time
@@ -28,7 +29,8 @@ import connectorBehavior
 import numpy as np
 import math
 
-path_modules = 'U:\\Sachdeva\\MT_Nair\\FE'
+# path_modules = 'U:\\Sachdeva\\MT_Nair\\FE'
+path_modules = r'C:\Users\lenovo\Desktop\Aerospace\Thesis\FE_temp'
 
 os.chdir(path_modules)
 
@@ -146,6 +148,7 @@ class CoordinateTransformation:
 ct = CoordinateTransformation()
 
 analysis_Path = 'U:\\Sachdeva\\MT_Nair\\FE'
+analysis_Path = r'C:\Users\lenovo\Desktop\Aerospace\Thesis\FE_temp'
 
 session.journalOptions.setValues(replayGeometry=COORDINATE, recoverGeometry=COORDINATE)
 

@@ -1,16 +1,23 @@
-function V = superellipsoid_volume(a, b, c, n1, n2)
-    e1 =2/n1;
-    e2 =2/n2;
-    V = 8 * a * b * c * (gamma(1 + 1/e1)^2 * gamma(1 + 1/e2)) / ...
-        (gamma(1 + 2/e1) * gamma(1 + (1/e2 + 2/e1)));
+function V = superellipsoid_volume(a1, a2, a3, n1, n2)
+    eps1 = n1;   % controls z-related rounding
+    eps2 = n2;   % controls xy-plane rounding
+
+    % Beta function (MATLAB has beta(); otherwise use gamma relation)
+    B = @(p,q) beta(p,q);
+    % If you prefer no beta(), uncomment and use:
+    % B = @(p,q) gamma(p).*gamma(q)./gamma(p+q);
+
+    V = 2*a1*a2*a3 * eps1*eps2 * ...
+        B(eps1/2 + 1, eps1) * ...
+        B(eps2/2, eps2/2);
 end
 
- a = 117.1;
- b = 117.1;
- c = 585.4;
-n1 = 0.5;
-n2 = 0.5;
-thick = 5.15625;
+ a = 87.71;
+ b = 87.71;
+ c = 1227.89;
+n1 = 0.4;
+n2 = 1;
+thick = 1.252;
 
 V_inner = superellipsoid_volume(a, b, c, n1, n2);
 

@@ -1,28 +1,23 @@
-function V = superellipsoid_volume(a1, a2, a3, n1, n2)
-    eps1 = n1;   % controls z-related rounding
-    eps2 = n2;   % controls xy-plane rounding
+function V = superellipsoid_volume(a, b, c, n1, n2)
+    % pxy = 2/n2;
+    % pz  = 2/n1;
 
-    % Beta function (MATLAB has beta(); otherwise use gamma relation)
-    B = @(p,q) beta(p,q);
-    % If you prefer no beta(), uncomment and use:
-    % B = @(p,q) gamma(p).*gamma(q)./gamma(p+q);
-
-    V = 2*a1*a2*a3 * eps1*eps2 * ...
-        B(eps1/2 + 1, eps1) * ...
-        B(eps2/2, eps2/2);
+    % V = 8*a*b*c * gamma(1 + 1/pxy)^2 * gamma(1 + 1/pz) / ...
+    %             gamma(1 + 2/pxy + 1/pz);
+    V = 2*a*b*c*n1*n2*beta()
 end
-a = 107.29;
-b = 107.29;
-c = 965.62;
-n1 = 0.65;
-n2 = 1;
-thick = 1.503;
+a = 184;
+b = 184;
+c = 552;
+n1 = 1;
+n2 = 2;
+thick = 2.33;
 
 V_inner = superellipsoid_volume(a, b, c, n1, n2);
 
 V_cube = 8*a*b*c;
 
-eff = V_inner/V_cube*100;
+eff = 5.870308322012401e+07/V_cube*100;
 fprintf('Packing Efficiency = %.3f \n', eff);
 
 %%
@@ -107,7 +102,7 @@ for i = 1:length(n1_vals)
     V_se = superellipsoid_volume(a, b, c, n1, n2);
     packing_eff(i) = V_se / V_box;
 end
-ffd = 2./n1_vals;
+
 % Plot
 figure;
 plot(n1_vals, packing_eff, 'LineWidth', 2);

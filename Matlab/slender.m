@@ -134,7 +134,7 @@ function plot_stress_vs_slenderness(csvfile)
 
         % Spline interpolation for smooth curve
         lam_fine = linspace(min(lam_sorted), max(lam_sorted), 200);
-        s_fine = spline(lam_sorted, s_sorted, lam_fine);
+        s_fine = pchip(lam_sorted, s_sorted, lam_fine);
 
         plot(lam_fine, s_fine, 'LineWidth', 1.5);
         plot(lam_sorted, s_sorted, 'o', 'DisplayName', sprintf('n1 = %.2f', n1_val));
@@ -177,7 +177,7 @@ function plot_stress_vs_slenderness(csvfile)
 
         % Spline interpolation
         lam_fine = linspace(min(lam_sorted), max(lam_sorted), 200);
-        s_fine = spline(lam_sorted, s_sorted, lam_fine);
+        s_fine = pchip(lam_sorted, s_sorted, lam_fine);
 
         plot(lam_fine, s_fine, 'LineWidth', 1.5);
         plot(lam_sorted, s_sorted, 's', 'DisplayName', sprintf('n2 = %.2f', n2_val));

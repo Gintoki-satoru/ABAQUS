@@ -67,25 +67,26 @@ myModel = mdb.models[modelName]
 
 #############################   PARAMETERS    #############################
 
-r_inner = 75     # semi-axis in a
-z_inner = 75     # semi-axis in c
+r_inner = 62.74     # semi-axis in a
+z_inner = 2823.48   # semi-axis in c
 
-n = 1.0         # superellipse exponent
+n = 0.5        # superellipse exponent
 
 n_spline = 150  # number of spline points
 N_theta = 10   # number of meridional regions
 
 plyAngle = [90,45,-45,90]  # stacking sequence (degrees)
 thick   = 0.16*plyAngle.__len__()  # total thickness
+thick = 0.918
 N_part = plyAngle.__len__()  # number of partitions through thickness
 
 r_outer = r_inner + thick
 z_outer = z_inner + thick
 
-mesh_size = 0.25  # Mesh size
+mesh_size = 0.5  # Mesh size
 
 Press = 1 # Pressure load
-compositeMaterialName = 'car_epx'  # 'cfk', 'AL', 'gfk', 'cfknew', 'car_epx', 'im7_epx'
+compositeMaterialName = 'AL'  # 'cfk', 'AL', 'gfk', 'cfknew', 'car_epx', 'im7_epx'
 
 # Strength parameters
 Xt = 3179.2    # Longitudinal tensile strength
@@ -649,8 +650,8 @@ mdb.models['EllipseModel_2D'].YsymmBC(name='Bottom', createStepName='Initial',
     region=region, localCsys=None)
 
 region = a1.instances['SuperEllipsoid_2D-1'].sets['set_top']
-mdb.models['EllipseModel_2D'].XsymmBC(name='Top', createStepName='Initial', 
-    region=region, localCsys=None)
+# mdb.models['EllipseModel_2D'].XsymmBC(name='Top', createStepName='Initial', 
+#     region=region, localCsys=None)
 
 region = a.instances['SuperEllipsoid_2D-1'].sets['Temp_Load']
 mdb.models['EllipseModel_2D'].TemperatureBC(name='Temp', 
@@ -1538,9 +1539,9 @@ import csv
 # ------------------ USER INPUTS ------------------
 odb_path      = r"job-1.odb"
 step_name     = "LoadingStep"
-frame_index   = -1                 # -1 = last frame
-instance_name = "SUPERELLIPSOID_2D-1"         # ODB instance name (Assembly instance)
-nodeset_name  = "PLY_01_IFACE"           # Node set name (usually on the INSTANCE)
+frame_index   = -1 
+instance_name = "SUPERELLIPSOID_2D-1" 
+nodeset_name  = "PLY_01_IFACE" 
 out_csv       = r"nodeset_stress_coord.csv"
 
 # Stress components to export:

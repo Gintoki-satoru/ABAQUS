@@ -1,6 +1,12 @@
 # -*- coding: utf-8 -*-
 import numpy as np
-from math import gamma
+import math
+
+def beta_pos(p, q):
+    # valid for p>0, q>0
+    if p <= 0 or q <= 0:
+        raise ValueError("beta_pos requires p>0 and q>0")
+    return math.exp(math.lgamma(p) + math.lgamma(q) - math.lgamma(p + q))
 
 def superellipsoid_area(a, b, c, n1, n2, N=5250):
     """
@@ -40,12 +46,15 @@ def superellipsoid_area(a, b, c, n1, n2, N=5250):
 
     return np.sum(dA) * dphi * dtheta
 
-def superellipsoid_volume(a, b, c, n1, n2):
-    e1 = 2/n1
-    e2 = 2/n2
-    num = 8 * a * b * c * (gamma(1+1/e1))**2 * gamma(1+1/e2)
-    den = gamma(1+2/e1) * gamma(1+(1/e2 + 2/e1))
-    return num / den
+def superellipsoid_volume(a1, a2, a3, n1, n2):
+    # n1 = eps1, n2 = eps2 (your MATLAB equation)
+    if n1 <= 0 or n2 <= 0:
+        raise ValueError("n1 and n2 must be > 0 (e.g., n=2/N with N>0)")
+
+    term1 = beta_pos(n1/2.0 + 1.0, n1)
+    term2 = beta_pos(n2/2.0, n2/2.0)
+
+    return 2.0 * a1 * a2 * a3 * n1 * n2 * term1 * term2
 
 def shape_factor(A, V_inner, thick, a, b, c):
     """

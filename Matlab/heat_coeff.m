@@ -177,12 +177,17 @@ function A = superellipsoid_area(a, b, c, n1, n2, N)
     A = sum(dA(:)) * dphi * dtheta;
 end
 
-function V = superellipsoid_volume(a, b, c, n1, n2)
-    e1 = 2/n1;
-    e2 = 2/n2;
-    V = 8 * a * b * c * ...
-        (gamma(1+1/e1))^2 * gamma(1+1/e2) / ...
-        (gamma(1+2/e1) * gamma(1+(1/e2+2/e1)));
+function V = superellipsoid_volume(a1, a2, a3, n1, n2)
+    eps1 = n1;   % controls z-related rounding
+    eps2 = n2;   % controls xy-plane rounding
+    % Beta function (MATLAB has beta(); otherwise use gamma relation)
+    B = @(p,q) beta(p,q);
+    % If you prefer no beta(), uncomment and use:
+    % B = @(p,q) gamma(p).*gamma(q)./gamma(p+q);
+
+    V = 2*a1*a2*a3 * eps1*eps2 * ...
+        B(eps1/2 + 1, eps1) * ...
+        B(eps2/2, eps2/2);
 end
 
 function S = shape_factor(A, V_inner, thick, a, b, c)
