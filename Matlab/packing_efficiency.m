@@ -11,10 +11,10 @@ function V = superellipsoid_volume(a1, a2, a3, n1, n2)
         B(eps1/2 + 1, eps1) * ...
         B(eps2/2, eps2/2);
 end
-a = 107.29;
-b = 107.29;
-c = 965.62;
-n1 = 0.65;
+a = 46.05;
+b = 46.05;
+c = 120*a;
+n1 = 0.45;
 n2 = 1;
 thick = 1.503;
 
@@ -62,8 +62,8 @@ function plot_packing_n1_n2_range()
     set(gca, 'YDir','normal');
     colormap turbo; colorbar;
 
-    xlabel('n1'); ylabel('n2');
-    title('Packing Efficiency for n1,n2 = 1 to 2 (a=b=c=1)');
+    xlabel('n_1'); ylabel('n_2');
+    title('Packing Efficiency for n_1,n_2 = 0.1 to 1 (a=b=c=1)');
     
     % Add numeric labels
     for i = 1:size(H,1)
@@ -85,9 +85,9 @@ plot_packing_n1_n2_range();
 %%
 
 % Geometry (can be arbitrary since efficiency is shape-only)
-a = 1;
-b = 1;
-c = 1;
+a = 241.09;
+b = 241.09;
+c = 241.09;
 
 % Fixed exponent
 n2 = 1;
@@ -95,7 +95,6 @@ n2 = 1;
 % Vary n1
 n1_vals = linspace(1, 0.1, 100);
 
-% Preallocate
 packing_eff = zeros(size(n1_vals));
 
 % Bounding box volume
@@ -107,11 +106,32 @@ for i = 1:length(n1_vals)
     V_se = superellipsoid_volume(a, b, c, n1, n2);
     packing_eff(i) = V_se / V_box;
 end
-ffd = 2./n1_vals;
+
+% ---- Reference geometries in the same bounding box ----
+rs = 241.09;                 % radius limited by half-width (a=b assumed)
+              % total available height in box
+V_box = 8 *rs^3;
+% Sphere (fits when c>=a; here c=a)
+V_sphere = (4/3) * pi * rs^3;
+PE_sphere = V_sphere / V_box;
+
+r = 152.5;
+H = 905; 
+V_box = H*4*r^2;
+% Cylinder + hemispherical domes ("capsule") with total height H
+L = max(0, H - 2*r);   % cylinder length (>=0)
+V_capsule = pi*r^2*L + (4/3)*pi*r^3;
+PE_capsule = V_capsule / V_box;
+
 % Plot
 figure;
-plot(n1_vals, packing_eff, 'LineWidth', 2);
+plot(n1_vals, packing_eff, 'LineWidth', 2); hold on;
+% yline(PE_sphere, '--', 'Spherical geometry', 'LineWidth', 1.5);
+% yline(PE_capsule, ':', 'Cylindrical geometry', 'LineWidth', 1.5);
+hold off;
+
 xlabel('n_1');
 ylabel('Packing Efficiency');
 title('Packing Efficiency vs n_1 (n_2 = 1)');
 grid on;
+% legend('Superellipsoid', 'Sphere', 'Cyl + hemis domes', 'Location', 'best');

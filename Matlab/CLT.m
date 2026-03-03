@@ -1,9 +1,9 @@
-angles_deg = [45,-45,-45,45];
+angles_deg = [0 45 -45 90 90 -45 45 0];
 Nply = numel(angles_deg);
-R = 241.09;     % Radius [mm]
+R = 180;     % Radius [mm]
 t_tot     = 0.16*Nply;     % total thickness [mm]
 R_mid = R + t_tot/2;
-Pi    = 1;      
+Pi    = 0.1;      
 Po    = 0.0;
 
 % Ply thicknesses [mm]
@@ -11,18 +11,18 @@ t_ply = t_tot / Nply;
 tply  = t_ply * ones(1,Nply);
 
 % UD lamina properties in MPa - 20K car epx
-E1  = 173930;    % [MPa]
-E2  = 15690;     % [MPa]
-G12 = 11244;      % [MPa]
-nu12 = 0.433;
-nu21 = nu12*E2/E1;
+% E1  = 173930;    % [MPa]
+% E2  = 15690;     % [MPa]
+% G12 = 11244;      % [MPa]
+% nu12 = 0.433;
+% nu21 = nu12*E2/E1;
 
 % UD lamina properties in MPa - im7
-% E1  = 161000;    % [MPa]
-% E2  = 11380;     % [MPa]
-% G12 = 5200;      % [MPa]
-% nu12 = 0.32;
-% nu21 = nu12*E2/E1;
+E1  = 161000;    % [MPa]
+E2  = 11380;     % [MPa]
+G12 = 5200;      % [MPa]
+nu12 = 0.32;
+nu21 = nu12*E2/E1;
 
 % ----------------------- MEMBRANE LOADS -----------------------
 p = (Pi - Po);                    % [MPa]
@@ -86,39 +86,66 @@ for k=1:Nply
     sigma12(:,k) = stress_xy_to_12(sig_xy, th);
 end
 
-% ----------------------- REPORT -----------------------
-fprintf('--- CLT results (sphere membrane loading) ---\n');
-fprintf('Mid-plane strains eps0 = [%.6e  %.6e  %.6e]\n', eps0(1), eps0(2), eps0(3));
-fprintf('Curvatures kappa = [%.6e  %.6e  %.6e] 1/mm\n', kappa(1), kappa(2), kappa(3));
 
-% Print ply lamina stresses
-fprintf('\nPly mid-surface stresses in lamina coords (1-2):\n');
-fprintf('Ply  Angle   sigma1(MPa)   sigma2(MPa)   tau12(MPa)\n');
-for k=1:Nply
-    fprintf('%3d  %6.1f  %12.3f  %12.3f  %12.3f\n', k, angles_deg(k), ...
-        sigma12(1,k), sigma12(2,k), sigma12(3,k));
+nPtsPerPly = 100;                 % how many points inside each ply
+
+% Total number of sample points
+z_samp = zeros(1, Nply*nPtsPerPly);
+sig_samp = zeros(3, Nply*nPtsPerPly);   % [sx; sy; txy] at each sample z
+
+idx = 0;
+
+for k = 1:Nply
+    
+    % z-range of this ply (avoid duplicating interface points)
+    zk  = z(k);
+    zk1 = z(k+1);
+    z_loc = linspace(zk, zk1, nPtsPerPly);
+    if k < Nply
+        z_loc = z_loc(1:end-1);         % drop top interface (will be in next ply)
+    end
+    
+    % Ply stiffness
+    Qbar = Qbar_all(:,:,k);
+    
+    for j = 1:numel(z_loc)
+        idx = idx + 1;
+        z_samp(idx) = z_loc(j);
+        
+        % strain at this z
+        eps_xy = eps0 + z_loc(j)*kappa;
+        
+        % stress at this z (global x-y)
+        sig_samp(:,idx) = Qbar * eps_xy;
+    end
 end
 
-% ----------------------- PLOTS -----------------------
+% Trim in case we dropped points
+z_samp = z_samp(1:idx);
+sig_samp = sig_samp(:,1:idx);
+
+% --------- PLOT ----------
 figure; hold on; grid on;
-plot(z_mid, sigmaxy(1,:), '-o', 'LineWidth', 1.5);
-plot(z_mid, sigmaxy(2,:), '-o', 'LineWidth', 1.5);
-plot(z_mid, sigmaxy(3,:), '-o', 'LineWidth', 1.5);
+
+plot(z_samp, sig_samp(1,:), 'LineWidth', 1.5);
+plot(z_samp, sig_samp(2,:), 'LineWidth', 1.5);
+plot(z_samp, sig_samp(3,:), 'LineWidth', 1.5);
+
 xlabel('z (mm)'); ylabel('Stress (MPa)');
-title('Global (x-y) ply mid-surface stresses from CLT');
-legend('\sigma_x (meridional)','\sigma_y (hoop)','\tau_{xy}','Location','best');
+title('Global (x-y) stresses from CLT sampled within each ply');
+legend('\sigma_x (meridional)','\sigma_y (hoop)','\tau_{xy}', 'Location','best');
 
-figure; hold on; grid on;
-plot(z_mid, sigma12(1,:), '-o', 'LineWidth', 1.5);
-plot(z_mid, sigma12(2,:), '-o', 'LineWidth', 1.5);
-plot(z_mid, sigma12(3,:), '-o', 'LineWidth', 1.5);
-xlabel('z (mm)'); ylabel('Stress (MPa)');
-title('Lamina (1-2) ply mid-surface stresses from CLT');
-legend('\sigma_1','\sigma_2','\tau_{12}','Location','best');
+% figure; hold on; grid on;
+% plot(z_mid, sigma12(1,:), '-o', 'LineWidth', 1.5);
+% plot(z_mid, sigma12(2,:), '-o', 'LineWidth', 1.5);
+% plot(z_mid, sigma12(3,:), '-o', 'LineWidth', 1.5);
+% xlabel('z (mm)'); ylabel('Stress (MPa)');
+% title('Lamina (1-2) ply mid-surface stresses from CLT');
+% legend('\sigma_1','\sigma_2','\tau_{12}','Location','best');
 
 
 
-%
+%%
 % sigmaxy : 3 x Nplies  (global stresses at ply mids: [sx; sy; txy]) in MPa
 % z_mid   : 1 x Nplies  (ply mid-thickness locations, mm)
 % theta   : 1 x Nplies  (ply angles in degrees, material 1-axis w.r.t global x)

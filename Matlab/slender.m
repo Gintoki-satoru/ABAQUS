@@ -136,13 +136,23 @@ function plot_stress_vs_slenderness(csvfile)
         lam_fine = linspace(min(lam_sorted), max(lam_sorted), 200);
         s_fine = pchip(lam_sorted, s_sorted, lam_fine);
 
-        plot(lam_fine, s_fine, 'LineWidth', 1.5);
-        plot(lam_sorted, s_sorted, 'o', 'DisplayName', sprintf('n1 = %.2f', n1_val));
-    end
+        h_line = plot(lam_fine, s_fine, 'LineWidth', 1.5, ...
+              'HandleVisibility','off');
+        hold on
+        
+        % Get the automatically assigned color
+        c = get(h_line, 'Color');
+        
+        % Plot markers with same color
+        plot(lam_sorted, s_sorted, 'o', ...
+             'Color', c, ...
+             'MarkerFaceColor', c, ...
+             'DisplayName', sprintf('n_1 = %.2f', n1_val));
+            end
 
     xlabel('Slenderness ratio \lambda = c/a')
     ylabel('Stress (MPa)')
-    title('Stress vs Slenderness ratio (n2 = 1, n1 decreasing)')
+    title('Stress vs Slenderness ratio (n_2 = 1, n_1 decreasing)')
     legend show; grid on;
     hold off;
 
@@ -179,13 +189,23 @@ function plot_stress_vs_slenderness(csvfile)
         lam_fine = linspace(min(lam_sorted), max(lam_sorted), 200);
         s_fine = pchip(lam_sorted, s_sorted, lam_fine);
 
-        plot(lam_fine, s_fine, 'LineWidth', 1.5);
-        plot(lam_sorted, s_sorted, 's', 'DisplayName', sprintf('n2 = %.2f', n2_val));
+        h_line = plot(lam_fine, s_fine, 'LineWidth', 1.5, ...
+                      'HandleVisibility','off');
+        hold on
+        
+        % Extract auto-assigned color
+        c = get(h_line, 'Color');
+        
+        % Plot square markers with same color
+        plot(lam_sorted, s_sorted, 's', ...
+             'Color', c, ...
+             'MarkerFaceColor', c, ...
+             'DisplayName', sprintf('n_2 = %.2f', n2_val));
     end
 
     xlabel('Slenderness ratio \lambda = c/a')
     ylabel('Stress (MPa)')
-    title('Stress vs Slenderness ratio (n1 = 1, n2 decreasing)')
+    title('Stress vs Slenderness ratio (n_1 = 1, n_2 decreasing)')
     legend show; grid on;
     hold off;
 

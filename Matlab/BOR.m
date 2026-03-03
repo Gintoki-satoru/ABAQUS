@@ -311,15 +311,25 @@ function plot_BOR_vs_slenderness(csvfile)
         lam_fine = linspace(min(lam_sorted), max(lam_sorted), 200);
         BOR_fine = spline(lam_sorted, BOR_sorted, lam_fine);
 
-        plot(lam_fine, BOR_fine, 'LineWidth', 1.5);
-        plot(lam_sorted, BOR_sorted, 'o', 'DisplayName', sprintf('n1 = %.2f', n1_val));
-    end
-
-    xlabel('Slenderness ratio \lambda = c/a')
-    ylabel('Boil-off rate BOR (%/day)')
-    title('BOR vs Slenderness ratio (n2 = 1, n1 decreasing)')
-    legend show; grid on;
-    hold off;
+        h_line = plot(lam_fine, BOR_fine, 'LineWidth', 1.5, ...
+              'HandleVisibility','off');
+        hold on
+        
+        % Get assigned color
+        c = get(h_line, 'Color');
+        
+        % Plot markers with same color
+        plot(lam_sorted, BOR_sorted, 'o', ...
+             'Color', c, ...
+             'MarkerFaceColor', c, ...
+             'DisplayName', sprintf('n_1 = %.2f', n1_val));
+            end
+        
+            xlabel('Slenderness ratio \lambda = c/a')
+            ylabel('Boil-off rate BOR (%/day)')
+            title('BOR vs Slenderness ratio (n_2 = 1, n_1 decreasing)')
+            legend show; grid on;
+            hold off;
 end
 
 plot_BOR_vs_slenderness("cleaned_file.csv")

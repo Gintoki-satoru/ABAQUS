@@ -152,19 +152,19 @@ h_all_c = thick_h - t/2;
 % hoop stress##########################################
 figure; hold on; grid on;
 % CLT hoop stress (ply mid-surfaces)
-plot(z_mid, sigmaxy(2,:), '-o', ...
-     'LineWidth', 1.5, ...
-     'DisplayName', 'CLT (ply mid-surface)');
+plot(z_samp, sig_samp(2,:), '-', ...
+     'LineWidth', 2, ...
+     'DisplayName', 'CLT');
 
 % Abaqus hoop stress (integration points)
-plot(h_all_c, S_hoop, '-s', 'DisplayName', 'Abaqus')
+plot(h_all_c, S_hoop, '-s', 'DisplayName', 'Abaqus', 'LineWidth', 1.5)
 
 % Marie sol
-plot(h_all, sigma_theta,'--','DisplayName', '3D Elasticity');
+plot(h_all, sigma_theta,'--','DisplayName', '3D Elasticity', 'LineWidth', 1.5);
 
 xlabel('Thickness coordinate z [mm]');
 ylabel('\sigma_\theta [MPa]');
-title('Hoop stress through thickness');
+title('Circumfrential stress through thickness');
 legend('Location','best');
 
 % Total thickness from Abaqus data
@@ -176,15 +176,15 @@ h_all_m = thick_m - t/2;
 % Merid stress##########################################
 figure; hold on; grid on;
 % CLT hoop stress (ply mid-surfaces)
-plot(z_mid, sigmaxy(1,:), '-o', ...
-     'LineWidth', 1.5, ...
-     'DisplayName', 'CLT (ply mid-surface)');
+plot(z_samp, sig_samp(1,:), '-', ...
+     'LineWidth', 2, ...
+     'DisplayName', 'CLT');
 
 % Abaqus hoop stress (integration points)
-plot(h_all_m, S_mer, '-o', 'DisplayName', 'Abaqus');
+plot(h_all_m, S_mer, '-', 'DisplayName', 'Abaqus', 'LineWidth', 1.5);
 
 % Marie sol
-plot(h_all, sigma_phi,'--','DisplayName', '3D Elasticity');
+plot(h_all, sigma_phi,'--','DisplayName', '3D Elasticity', 'LineWidth', 1.5);
 
 xlabel('Thickness coordinate z [mm]');
 ylabel('\sigma_\phi [MPa]');
@@ -200,15 +200,15 @@ h_all_t = thick_t - t/2;
 % tau12 stress##########################################
 figure; hold on; grid on;
 % CLT hoop stress (ply mid-surfaces)
-plot(z_mid, sigmaxy(3,:), '-o', ...
-     'LineWidth', 1.5, ...
-     'DisplayName', 'CLT (ply mid-surface)');
+plot(z_samp, sig_samp(3,:), '-', ...
+     'LineWidth', 2, ...
+     'DisplayName', 'CLT');
 
 % Abaqus hoop stress (integration points)
-plot(h_all_t, tau_mh, '-^', 'DisplayName', 'Abaqus')
+plot(h_all_t, tau_mh, '-^', 'DisplayName', 'Abaqus', 'LineWidth', 1.5)
 
 % Marie sol
-plot(h_all, tau_phitheta,'--','DisplayName', '3D Elasticity');
+plot(h_all, tau_phitheta,'--','DisplayName', '3D Elasticity', 'LineWidth', 1.5);
 
 xlabel('Thickness coordinate z [mm]');
 ylabel('\tau_{\phi\theta} [MPa]');
