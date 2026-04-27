@@ -16,7 +16,7 @@ b = 46.05;
 c = 120*a;
 n1 = 0.45;
 n2 = 1;
-thick = 1.503;
+thick = 0.678;
 
 V_inner = superellipsoid_volume(a, b, c, n1, n2);
 

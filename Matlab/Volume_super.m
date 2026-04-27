@@ -5,16 +5,16 @@ function V = superellipsoid_volume(a1, a2, a3, n1, n2)
     B = @(p,q) beta(p,q);
 
     V = 2*a1*a2*a3 * eps1*eps2 * ...
-        B(eps1/2 + 1, eps1) * ...
-        B(eps2/2, eps2/2);
+        B(eps1/2, eps1 + 1) * ...
+        B(eps2/2, (eps2 + 2)/2);
 end
 
- a = 114.24;
- b = 114.24;
- c = 799.71;
-n1 = 0.7;
+ a = 111.26;
+ b = 111.26;
+ c = 1001.35;
+n1 = 0.65;
 n2 = 1;
-thick = 1.576;
+thick = 1.558;
 
 V_inner = superellipsoid_volume(a, b, c, n1, n2);
 

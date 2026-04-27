@@ -106,17 +106,14 @@ end
 
 % ---- Your volume function ----
 function V = superellipsoid_volume(a1, a2, a3, n1, n2)
-    eps1 = n1;   % controls z-related rounding
-    eps2 = n2;   % controls xy-plane rounding
+    eps1 = n1;
+    eps2 = n2;
 
-    % Beta function (MATLAB has beta(); otherwise use gamma relation)
     B = @(p,q) beta(p,q);
-    % If you prefer no beta(), uncomment and use:
-    % B = @(p,q) gamma(p).*gamma(q)./gamma(p+q);
 
     V = 2*a1*a2*a3 * eps1*eps2 * ...
-        B(eps1/2 + 1, eps1) * ...
-        B(eps2/2, eps2/2);
+        B(eps1/2, eps1 + 1) * ...
+        B(eps2/2, (eps2 + 2)/2);
 end
 
 
@@ -227,7 +224,7 @@ function generate_superellipsoid_parametric_new()
     % Two geometric ratios only
     % ------------------------------
     ABC_list = [
-        1 1 120
+        1 1 4
     ];
 
     % ------------------------------

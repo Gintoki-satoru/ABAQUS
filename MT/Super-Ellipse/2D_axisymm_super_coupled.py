@@ -37,8 +37,8 @@ import math
 import csv
 
 
-# path_modules = 'U:\\Sachdeva\\MT_Nair\\ABAQUS\\MT\\Super-Ellipse'
-path_modules = r"C:\Users\lenovo\Desktop\Aerospace\Thesis\ABAQUS\MT\Super-Ellipse"
+path_modules = 'U:\\Sachdeva\\MT_Nair\\ABAQUS\\MT\\Super-Ellipse'
+# path_modules = r"C:\Users\lenovo\Desktop\Aerospace\Thesis\ABAQUS\MT\Super-Ellipse"
 if path_modules not in sys.path:
     sys.path.append(path_modules)
 
@@ -67,17 +67,17 @@ myModel = mdb.models[modelName]
 
 #############################   PARAMETERS    #############################
 
-r_inner = 62.74     # semi-axis in a
-z_inner = 2823.48   # semi-axis in c
+r_inner = 111.26     # semi-axis in a
+z_inner = 1001.34   # semi-axis in c
 
-n = 0.5        # superellipse exponent
+n = 0.65        # superellipse exponent
 
 n_spline = 150  # number of spline points
 N_theta = 10   # number of meridional regions
 
-plyAngle = [90,45,-45,90]  # stacking sequence (degrees)
+plyAngle = [60, -30, -60, 30]  # stacking sequence (degrees)
 thick   = 0.16*plyAngle.__len__()  # total thickness
-thick = 0.918
+# thick = 2.372
 N_part = plyAngle.__len__()  # number of partitions through thickness
 
 r_outer = r_inner + thick
@@ -86,7 +86,7 @@ z_outer = z_inner + thick
 mesh_size = 0.5  # Mesh size
 
 Press = 1 # Pressure load
-compositeMaterialName = 'AL'  # 'cfk', 'AL', 'gfk', 'cfknew', 'car_epx', 'im7_epx'
+compositeMaterialName = 'car_epx'  # 'cfk', 'AL', 'gfk', 'cfknew', 'car_epx', 'im7_epx'
 
 # Strength parameters
 Xt = 3179.2    # Longitudinal tensile strength

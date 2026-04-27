@@ -36,7 +36,6 @@ kappa = abs(dr_dth .* d2z_dth2 - dz_dth .* d2r_dth2) ./ ...
 z_geom_scaled = z_geom / max(z_geom) * max(z_data);
 
 % ---- Normalize curvature for visualization ----
-kappa_scaled = kappa / max(kappa) * max(r_geom);
 
 figure
 
@@ -44,28 +43,29 @@ figure
 yyaxis left
 h1 = plot(z_data, sphere_ratio, 'or', 'MarkerSize',4);
 ylabel('\sigma_\theta / \sigma_\phi')
-ylim([0 2.35])
+ylim([0 2.3])
 grid on
 hold on
 
-% ---- RIGHT: geometry ----
+% ---- RIGHT: TRUE curvature ----
 yyaxis right
-h2 = plot(z_geom_scaled, r_geom, 'k-', 'LineWidth',1.5);
+h3 = plot(z_geom_scaled, kappa, 'b--', 'LineWidth',1.5);
+ylabel('Curvature \kappa (1/mm)')
+ylim([0 0.0335])
 hold on
 
-% ---- Curvature ----
-h3 = plot(z_geom_scaled, kappa_scaled, 'b--', 'LineWidth',1.5);
-
-ylabel('Radius r (mm) / Scaled curvature')
+% ---- Super-ellipsoid profile (visual only) ----
+r_geom_vis = r_geom / max(r_geom) * max(kappa);
+h2 = plot(z_geom_scaled, r_geom_vis, 'k-', 'LineWidth',1.5);
 
 xlabel('Longitudinal coordinate z (mm)')
 title('Stress ratio variation with super-ellipsoid geometry and curvature')
 xlim([0 930])
 
 legend([h1 h2 h3], ...
-       {'Stress ratio  \sigma_\theta / \sigma_\phi', ...
+       {'Stress ratio \sigma_\theta / \sigma_\phi', ...
         'Super-ellipsoid profile', ...
-        'Curvature (scaled)'}, ...
+        'Curvature \kappa'}, ...
        'Location','northoutside', ...
        'Orientation','horizontal');
 
@@ -102,9 +102,6 @@ kappa = abs(dr_dth .* d2z_dth2 - dz_dth .* d2r_dth2) ./ ...
 % ---- Scale geometry to match FE axis ----
 z_geom_scaled = z_geom / max(z_geom) * max(z_data);
 
-% ---- Normalize curvature for visualization ----
-kappa_scaled = kappa / max(kappa) * max(r_geom);
-
 figure;
 
 % ---- LEFT: stress ratio ----
@@ -115,23 +112,25 @@ ylim([-1 3])
 grid on
 hold on
 
-% ---- RIGHT: geometry ----
+% ---- RIGHT: TRUE curvature ----
 yyaxis right
-h2 = plot(z_geom_scaled, r_geom, 'k-', 'LineWidth',1.5);
+h3 = plot(z_geom_scaled, kappa, 'b--', 'LineWidth',1.5);
+ylabel('Curvature \kappa (1/mm)')
 hold on
 
-% ---- Curvature ----
-h3 = plot(z_geom_scaled, kappa_scaled, 'b--', 'LineWidth',1.5);
+% ---- Sphere profile (visual only, not affecting axis meaning) ----
+% Normalize it just for visual overlay (no physical meaning)
+r_geom_vis = r_geom / max(r_geom) * max(kappa);
 
-ylabel('Radius r (mm) / Curvature')
+h2 = plot(z_geom_scaled, r_geom_vis, 'k-', 'LineWidth',1.5);
 
 xlabel('Longitudinal coordinate z (mm)')
 title('Stress ratio variation with spherical geometry and curvature')
 xlim([0 235])
 
 legend([h1 h2 h3], ...
-       {'Stress ratio  \sigma_\theta / \sigma_\phi', ...
+       {'Stress ratio \sigma_\theta / \sigma_\phi', ...
         'Sphere profile', ...
-        'Curvature (scaled)'}, ...
+        'Curvature \kappa'}, ...
        'Location','northoutside', ...
        'Orientation','horizontal');
