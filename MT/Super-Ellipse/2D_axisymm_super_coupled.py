@@ -37,8 +37,8 @@ import math
 import csv
 
 
-path_modules = 'U:\\Sachdeva\\MT_Nair\\ABAQUS\\MT\\Super-Ellipse'
-# path_modules = r"C:\Users\lenovo\Desktop\Aerospace\Thesis\ABAQUS\MT\Super-Ellipse"
+# path_modules = 'U:\\Sachdeva\\MT_Nair\\ABAQUS\\MT\\Super-Ellipse'
+path_modules = r"C:\Users\lenovo\Desktop\Aerospace\Thesis\ABAQUS\MT\Super-Ellipse"
 if path_modules not in sys.path:
     sys.path.append(path_modules)
 
@@ -67,8 +67,8 @@ myModel = mdb.models[modelName]
 
 #############################   PARAMETERS    #############################
 
-r_inner = 111.26     # semi-axis in a
-z_inner = 1001.34   # semi-axis in c
+r_inner = 103.59     # semi-axis in a
+z_inner = 932.33   # semi-axis in c
 
 n = 0.65        # superellipse exponent
 

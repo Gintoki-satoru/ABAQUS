@@ -62,15 +62,15 @@ myModel = mdb.models[modelName]
 
 #############################   PARAMETERS    #############################
 
-r_inner = 111.26     # semi-axis in a
-z_inner = 1001.34     # semi-axis in c
+r_inner = 103.59     # semi-axis in a
+z_inner = 932.33      # semi-axis in c
 
 n = 0.65         # superellipse exponent
 
 n_spline = 150  # number of spline points
 N_theta = 10   # number of meridional regions
 
-plyAngle = [15, -15, 15, -15]  # stacking sequence (degrees)
+plyAngle = [60, -30, -60, 30]  # stacking sequence (degrees)
 thick   = 0.16*plyAngle.__len__()  # total thickness
 N_part = plyAngle.__len__()  # number of partitions through thickness
 
@@ -780,7 +780,10 @@ def layer_mid_delta(k, thick, N_part):
 #     stackDirection=STACK_3
 # )
 
-r_cutoff = 4.0
+r_cutoff = 7.0
+z_cutoff = 4.0
+theta_min = 0
+theta_min = math.radians(theta_min)
 exclude_elems = set()
 elem_to_phi = {}
 elem_to_k   = {}
@@ -796,6 +799,8 @@ for elem in p.elements:
     r_c = sum(r) / len(r)
     z_c = sum(z) / len(z)
     if r_c < r_cutoff:
+        exclude_elems.add(elemLabel)
+    if z_c < z_cutoff:
         exclude_elems.add(elemLabel)
     # --- solve for thickness offset ---
     delta = solve_delta_for_point(
@@ -833,7 +838,7 @@ for elem in p.elements:
         name=set_name,
         elementLabels=(elemLabel,)
     )
-    angle_deg = 45.0 if elemLabel in exclude_elems else 90.0
+    angle_deg = 90.0 if elemLabel in exclude_elems else 90.0
     p.MaterialOrientation(
         region=elemSet,
         orientationType=SYSTEM,
@@ -1001,7 +1006,7 @@ def puck_iff(s22, s33, s12, s13, s23):
 
 def failure_analysis(elem_to_phi, strain_limit=0.005):
     odb = openOdb(odbPath, readOnly=True)
-    stepName = list(odb.steps.keys())[-1]
+    stepName = list(odb.steps.keys())[-1]  # safe for both
     step = odb.steps[stepName]
     frameIndex = -1
     frame = step.frames[frameIndex]
@@ -1011,23 +1016,16 @@ def failure_analysis(elem_to_phi, strain_limit=0.005):
         raise RuntimeError("Strain output 'E' not found in ODB frame. Request strains (E).")
     Sfield = frame.fieldOutputs['S'].getSubset(position=INTEGRATION_POINT)
     Efield = frame.fieldOutputs['E'].getSubset(position=INTEGRATION_POINT)
-    # Exclude elements based on S12
-    # S12_LIMIT = 0.02
-    # exclude_elems_s12 = set()
     for sv in Sfield.values:
         ip = getattr(sv, 'integrationPoint', None)
         if ip is None:
             continue
         sd = sv.data
         s12 = float(sd[3]) if len(sd) > 3 else 0.0
-        # if abs(s12) > S12_LIMIT:
-        #     exclude_elems_s12.add(sv.elementLabel)
     E_by_key = {}
     for ev in Efield.values:
         if ev.elementLabel in exclude_elems:
             continue
-        # if ev.elementLabel in exclude_elems_s12:
-        #     continue
         inst_name = ev.instance.name if ev.instance else ''
         ip = getattr(ev, 'integrationPoint', None)
         sp = getattr(ev, 'sectionPoint', None)
@@ -1048,20 +1046,21 @@ def failure_analysis(elem_to_phi, strain_limit=0.005):
     max_eps_tension = -1.0; max_eps_elem=None; max_eps_ip=None; max_eps_inst=''
     max_puck = -1.0; max_puck_elem=None; max_puck_ip=None; max_puck_inst=''
     missing_strain = 0
-    with open(out_csv, 'w', newline='') as f:
+    # --- Python 2/3 compatible file open ---
+    if sys.version_info[0] < 3:
+        f = open(out_csv, 'wb')
+    else:
+        f = open(out_csv, 'w', newline='')
+    with f:
         w = csv.writer(f)
         w.writerow([
             'odb','step','frameIndex','frameValue',
             'instance','elementLabel','integrationPoint','sectionPoint',
-            # global stresses/strains
             'S11','S22','S33','S12','S13','S23',
             'E11','E22','E33','E12','E13','E23',
-            # ply
             'phi_deg',
-            # stresses/strains in Puck lamina axes (1=fiber,2=trans,3=thk)
             'S11_p','S22_p','S33_p','S12_p','S13_p','S23_p',
             'E11_p','E22_p','E33_p','E12_p','E13_p','E23_p',
-            # criteria
             'TW','FAIL_TW(>=1)',
             'max_tension_strain(max(E11_p+,E22_p+))','strain_limit','FAIL_tension_strain(>limit)',
             'Puck_FF','Puck_FF_t','Puck_FF_c','S_f_eff',
@@ -1073,8 +1072,6 @@ def failure_analysis(elem_to_phi, strain_limit=0.005):
             el = sv.elementLabel
             if el in exclude_elems:
                 continue
-            # if el in exclude_elems_s12:
-            #     continue
             if el not in elem_to_phi:
                 continue
             inst_name = sv.instance.name if sv.instance else ''
@@ -1090,12 +1087,13 @@ def failure_analysis(elem_to_phi, strain_limit=0.005):
             s13 = float(sd[4]) if len(sd) > 4 else 0.0
             s23 = float(sd[5]) if len(sd) > 5 else 0.0
             phi = float(elem_to_phi[el])
-            # ---- full 3D transform to Puck lamina axes ----
-            s11p, s22p, s33p, s12p, s13p, s23p = global_to_puck_voigt(s11,s22,s33,s12,s13,s23, phi)
+            s11p, s22p, s33p, s12p, s13p, s23p = global_to_puck_voigt(
+                s11,s22,s33,s12,s13,s23, phi)
             key = (inst_name, el, ip, sp)
             if key in E_by_key:
                 e11, e22, e33, e12, e13, e23 = E_by_key[key]
-                e11p, e22p, e33p, e12p, e13p, e23p = global_to_puck_voigt(e11,e22,e33,e12,e13,e23, phi)
+                e11p, e22p, e33p, e12p, e13p, e23p = global_to_puck_voigt(
+                    e11,e22,e33,e12,e13,e23, phi)
             else:
                 missing_strain += 1
                 e11=e22=e33=e12=e13=e23=float('nan')
@@ -1104,14 +1102,14 @@ def failure_analysis(elem_to_phi, strain_limit=0.005):
             fail_tw = 1 if tw >= 1.0 else 0
             if tw > max_tw:
                 max_tw = tw; max_tw_elem = el; max_tw_ip = ip; max_tw_inst = inst_name
-            # ---- ply strain limit (tension in fiber/trans) ----
             if not (math.isnan(e11p) or math.isnan(e22p)):
                 e11t = e11p if e11p > 0.0 else 0.0
                 e22t = e22p if e22p > 0.0 else 0.0
                 max_tension = max(e11t, e22t)
                 fail_eps = 1 if (e11p > strain_limit or e22p > strain_limit) else 0
                 if max_tension > max_eps_tension:
-                    max_eps_tension = max_tension; max_eps_elem = el; max_eps_ip = ip; max_eps_inst = inst_name
+                    max_eps_tension = max_tension
+                    max_eps_elem = el; max_eps_ip = ip; max_eps_inst = inst_name
             else:
                 max_tension = float('nan'); fail_eps = 0
             ff, ff_t, ff_c, s_f_eff = puck_ff(s11p, s22p, s33p)
@@ -1119,10 +1117,11 @@ def failure_analysis(elem_to_phi, strain_limit=0.005):
             fail_ff = 1 if ff >= 1.0 else 0
             fail_iff = 1 if iff >= 1.0 else 0
             fail_any = 1 if (fail_tw or fail_eps or fail_ff or fail_iff) else 0
-            # Track worst across all criteria
-            worst = max(tw,
-                        max_tension if not math.isnan(max_tension) else -1.0,
-                        ff, iff)
+            worst = max(
+                tw,
+                max_tension if not math.isnan(max_tension) else -1.0,
+                ff, iff
+            )
             if worst > max_any:
                 max_any = worst; max_any_elem = el; max_any_ip = ip; max_any_inst = inst_name
                 if worst == tw:
@@ -1135,7 +1134,8 @@ def failure_analysis(elem_to_phi, strain_limit=0.005):
                     max_any_crit = 'Strain_limit'
             worst_puck = max(ff, iff)
             if worst_puck > max_puck:
-                max_puck = worst_puck; max_puck_elem = el; max_puck_ip = ip; max_puck_inst = inst_name
+                max_puck = worst_puck
+                max_puck_elem = el; max_puck_ip = ip; max_puck_inst = inst_name
             w.writerow([
                 base, step.name, frameIndex, frame.frameValue,
                 inst_name, el, ip, str(sp) if sp is not None else '',
@@ -1173,4 +1173,3 @@ def failure_analysis(elem_to_phi, strain_limit=0.005):
     print("  Integration pt:", max_any_ip)
 
 failure_analysis(elem_to_phi, strain_limit=0.005)
-
